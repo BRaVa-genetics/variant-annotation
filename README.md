@@ -12,3 +12,4 @@ This repository applies a series of steps to annotate variants for gene-based te
 - This fork enables batching of variant annotations on the GPU 
 - CPU performance: ~1k predictions per hour
 - GPU (A100 40GB) performance: ~700k predictions per hour
+- Docker: https://hub.docker.com/r/cmgantwerpen/spliceai_v1.3/
