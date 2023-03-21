@@ -6,7 +6,33 @@ This repository applies a series of steps to annotate variants for gene-based te
 4. Annotate variants with MAC and MAF information in gnomAD
 
 ## VEP
+Install VEP version 105 via CLI as described [here](https://www.ensembl.org/info/docs/tools/vep/script/vep_download.html) or summarized below:
+```
+# download ensembl repo
+git clone https://github.com/Ensembl/ensembl-vep.git
+cd ensembl-vep
+
+# install vep version 105
+git checkout release/105
+perl INSTALL.pl
+```
+
+
 - `.json` file used for VEP is here.
+
+
+## LOFTEE
+Download LOFTEE version XX and dependencies via CLI:
+```
+
+
+
+```
+
+
+
+
+
 ## SpliceAI Annotations
 - Using the fork https://github.com/geertvandeweyer/SpliceAI
 - This fork enables batching of variant annotations on the GPU 
