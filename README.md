@@ -6,24 +6,74 @@ This repository applies a series of steps to annotate variants for gene-based te
 4. Annotate variants with MAC and MAF information in gnomAD
 
 
-## VEP (With docker)
-
-## VEP (without docker)
-
-
-### Installation
-Install VEP version 105 via CLI as described [here](https://www.ensembl.org/info/docs/tools/vep/script/vep_download.html) or summarized below:
+## VEP (with conda)
+- Install the conda env below directly from the .yml file:
 ```
-# download ensembl repo
-git clone https://github.com/Ensembl/ensembl-vep.git
-cd ensembl-vep
+conda env create -f bravavep.yml
 
-# pull version 105
-git checkout release/105
-perl INSTALL.pl
 ```
 
-- `.json` file used for VEP is here.
+- If this does not work, then code for creating the .yml and building baseline VEP v105 can be found here:
+```
+# ensure we have the right channels
+conda config --append channels conda-forge 
+conda config --append channels bioconda
+# create environemnt 
+conda create -n brava-vep-v3
+conda install -c bioconda ensembl-vep=105.0
+pip install hail notebook
+# install zlib (only conda-forge has v2.202-pl5321h166bdaf_0)
+conda install -c conda-forge perl-compress-raw-zlib 
+```
+
+- Download and install human vep cache:
+```
+my_vep_dir="/well/lindgren-ukbb/projects/ukbb-11867/flassen/projects/KO/brava/vep_test"
+vep_install -a cf -s homo_sapiens -y GRCh38 -c ${my_vep_dir} --CONVERT
+(ls ${my_vep_dir}/homo_sapiens/105_GRCh38  && echo "SUCCESS") || echo "FAILED"
+```
+
+- Test if VEP can be run from the command line by typing 'vep'.
+- Test if VEP can be run through hail by opening up a python session with 'python3' and entering:
+```
+>>> hl.init(
+        log="test.log",
+        default_reference="GRCh38",
+        append=True,
+        min_block_size=1,
+        tmp_dir='/well/lindgren-ukbb/projects/ukbb-11867/flassen/spark',
+        local_tmpdir='/well/lindgren-ukbb/projects/ukbb-11867/flassen/spark',
+        master='local[%s]' % 1 # Required to prevent using more CPU resources than requested
+    )
+
+mt = hl.read_matrix_table("/well/lindgren-ukbb/projects/ukbb-11867/flassen/projects/KO/wes_ko_ukbb/data/unphased/wes/prefilter/200k/ukb_split_wes_200k_chr21_parents.mt")
+vep_mt = hl.vep(mt, "/well/lindgren-ukbb/projects/ukbb-11867/flassen/projects/KO/wes_ko_ukbb/utils/configs/vep_test.json")
+>>> vep_mt.vep.most_severe_consequence
+<StringExpression of type str>
+>>> vep_mt.vep.most_severe_consequence.show()
++----------------+------------+--------------------------------------+
+| locus          | alleles    | <expr>                               |
++----------------+------------+--------------------------------------+
+| locus<GRCh38>  | array<str> | str                                  |
++----------------+------------+--------------------------------------+
+| chr21:10413617 | ["C","T"]  | "non_coding_transcript_exon_variant" |
+| chr21:10413618 | ["G","A"]  | "non_coding_transcript_exon_variant" |
+| chr21:10413624 | ["C","T"]  | "non_coding_transcript_exon_variant" |
+| chr21:10413627 | ["C","G"]  | "non_coding_transcript_exon_variant" |
+| chr21:10413629 | ["C","T"]  | "non_coding_transcript_exon_variant" |
+| chr21:10413631 | ["C","T"]  | "non_coding_transcript_exon_variant" |
+| chr21:10413633 | ["C","T"]  | "non_coding_transcript_exon_variant" |
+| chr21:10413634 | ["T","G"]  | "non_coding_transcript_exon_variant" |
+| chr21:10413636 | ["G","T"]  | "non_coding_transcript_exon_variant" |
+| chr21:10413638 | ["T","A"]  | "non_coding_transcript_exon_variant" |
++----------------+------------+--------------------------------------+
+
+
+```
+
+
+
+
 
 ###  dbNSFP plguin installation
 Guide adopted from [here](https://sites.google.com/site/jpopgen/dbNSFP).
@@ -46,11 +96,6 @@ curl -O https://s3.amazonaws.com/bcbio_nextgen/human_ancestor.fa.gz.gzi
 ```
 curl -O https://personal.broadinstitute.org/konradk/loftee_data/GRCh37/phylocsf_gerp.sql.gz
 ```
-
-
-
-
-
 
 
 
