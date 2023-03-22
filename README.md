@@ -24,6 +24,8 @@ conda install -c bioconda ensembl-vep=105.0
 pip install hail notebook
 # install zlib (only conda-forge has v2.202-pl5321h166bdaf_0)
 conda install -c conda-forge perl-compress-raw-zlib 
+# install bioperl for LOFTEE
+conda install -c bioconda perl-bioperl
 ```
 
 - Download and install human vep cache:
@@ -50,7 +52,7 @@ hl.init(
     )
 
 mt = hl.read_matrix_table("/well/lindgren-ukbb/projects/ukbb-11867/flassen/projects/KO/wes_ko_ukbb/data/unphased/wes/prefilter/200k/ukb_split_wes_200k_chr21_parents.mt")
-vep_mt = hl.vep(mt, "/well/lindgren-ukbb/projects/ukbb-11867/flassen/projects/KO/wes_ko_ukbb/utils/configs/vep_test.json")
+vep_mt = hl.vep(mt, "/well/lindgren-ukbb/projects/ukbb-11867/flassen/projects/KO/brava/variant-annotation/loftee.json")
 >>> vep_mt.vep.most_severe_consequence
 <StringExpression of type str>
 >>> vep_mt.vep.most_severe_consequence.show()
