@@ -36,7 +36,10 @@ vep_install -a cf -s homo_sapiens -y GRCh38 -c ${my_vep_dir} --CONVERT
 - Test if VEP can be run from the command line by typing 'vep'.
 - Test if VEP can be run through hail by opening up a python session with 'python3' and entering:
 ```
->>> hl.init(
+import hail as hl
+from gnomad.utils.vep import process_consequences
+
+hl.init(
         log="test.log",
         default_reference="GRCh38",
         append=True,
@@ -67,8 +70,6 @@ vep_mt = hl.vep(mt, "/well/lindgren-ukbb/projects/ukbb-11867/flassen/projects/KO
 | chr21:10413636 | ["G","T"]  | "non_coding_transcript_exon_variant" |
 | chr21:10413638 | ["T","A"]  | "non_coding_transcript_exon_variant" |
 +----------------+------------+--------------------------------------+
-
-
 ```
 
 
