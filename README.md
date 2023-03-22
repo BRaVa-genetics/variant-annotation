@@ -13,15 +13,18 @@ This repository applies a series of steps to annotate variants for gene-based te
 - CPU performance: ~1k predictions per hour
 - GPU (A100 40GB) performance: ~700k predictions per hour
 
+## SpliceAI Batching parameters
+*When setting the batching parameters, be mindful of the system and gpu memory of the machine you are running the script on. Feel free to experiment, but some reasonable -T numbers would be 64/128. CPU memory is larger, and increasing -B might further improve performance.*
+
 ## Run SpliceAI (with Docker):
 ```
-wget http://hgdownload.cse.ucsc.edu/goldenPath/hg38/bigZips/hg38.fa.gz
+wget http://hgdownload.cse.ucsc.edu/goldenPath/hg38/bigZips/hg38.fa.gz -P ./data/
 docker pull cmgantwerpen/spliceai_v1.3
-docker run --gpus all cmgantwerpen/spliceai_v1.3:latest spliceai -I input.vcf -O output.vcf -R hg38.fa.gz -A grch38 -B 256 -T 32 
+docker run --gpus all cmgantwerpen/spliceai_v1.3:latest spliceai -I input.vcf -O output.vcf -R ./data/hg38.fa.gz -A ./data/SpliceAI/gencode.v39.ensembl.v105.annotation.txt.gz -B 4096 -T 256
 ```
 ## Run SpliceAI (without Docker):
 ```
-wget http://hgdownload.cse.ucsc.edu/goldenPath/hg38/bigZips/hg38.fa.gz
+wget http://hgdownload.cse.ucsc.edu/goldenPath/hg38/bigZips/hg38.fa.gz -P ./data/
 
 git clone https://github.com/geertvandeweyer/SpliceAI.git
 cd SpliceAI
@@ -29,5 +32,5 @@ python setup.py install
 
 pip install tensorflow
 
-spliceai -I input.vcf -O output.vcf -R hg38.fa.gz -A grch38 -B 256 -T 32 
+spliceai -I input.vcf -O output.vcf -R ./data/hg38.fa.gz -A ./data/SpliceAI/gencode.v39.ensembl.v105.annotation.txt.gz -B 4096 -T 256
 ```
