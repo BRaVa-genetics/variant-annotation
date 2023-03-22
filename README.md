@@ -6,7 +6,7 @@ This repository applies a series of steps to annotate variants for gene-based te
 4. Annotate variants with MAC and MAF information in gnomAD
 
 
-## VEP (with conda)
+## Installing Hail-compatible VEP with conda
 - Install the conda env below directly from the .yml file:
 ```
 conda env create -f bravavep.yml
