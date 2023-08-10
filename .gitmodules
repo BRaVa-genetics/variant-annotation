@@ -1,3 +1,0 @@
-[submodule "process-vep"]
-	path = process-vep
-	url = git@github.com:BRaVa-genetics/variant-annotation-python.git
