@@ -1,109 +1,25 @@
-# Variant annotation for BRaVa
-This repository applies a series of steps to annotate variants for gene-based testing in SAIGE.
-1. Run VEP version 105 and the LOFTEE v1.04_GRCh38.
-2. Run SpliceAI
-3. Merge the resultant annotations and use Hail to extract variant annotations according to recommendations. https://docs.google.com/document/d/11Nnb_nUjHnqKCkIB3SQAbR6fl66ICdeA-x_HyGWsBXM/edit#
-4. Annotate variants with MAC and MAF information in gnomAD
+# BRaVa Variant Annotation
+This repository contains all information and scripts required to generate SAIGE annotations for group tests.
 
 
-## Installing Hail-compatible VEP with conda
-- Install the conda env below directly from the .yml file:
-```
-conda env create -f bravavep.yml
+1. Run VEP version 105 w/ LOFTEE v1.04_GRCh38 (Docker/Singularity provided).
+2. Run SpliceAI (batched version)
+3. Run the Python BRaVa annotation script to extract variant annotations [according to recommendations.](https://docs.google.com/document/d/11Nnb_nUjHnqKCkIB3SQAbR6fl66ICdeA-x_HyGWsBXM/edit#)
 
-```
+## 1A. Running VEP
 
-- If this does not work, then code for creating the .yml and building baseline VEP v105 can be found here:
-```
-# ensure we have the right channels
-conda config --append channels conda-forge 
-conda config --append channels bioconda
-# create environemnt 
-conda create -n brava-vep-v3
-conda install -c bioconda ensembl-vep=105.0
-pip install hail notebook
-# install zlib (only conda-forge has v2.202-pl5321h166bdaf_0)
-conda install -c conda-forge perl-compress-raw-zlib 
-# install bioperl for LOFTEE
-conda install -c bioconda perl-bioperl
-```
+Complete instructions and code provided in the [vep105_loftee repo](https://github.com/BRaVa-genetics/vep105_loftee)
 
-- Download and install human vep cache:
-```
-my_vep_dir="/well/lindgren-ukbb/projects/ukbb-11867/flassen/projects/KO/brava/vep_test"
-vep_install -a cf -s homo_sapiens -y GRCh38 -c ${my_vep_dir} --CONVERT
-(ls ${my_vep_dir}/homo_sapiens/105_GRCh38  && echo "SUCCESS") || echo "FAILED"
-```
+a. Download all required resources (cache etc...)
 
-- Test if VEP can be run from the command line by typing 'vep'.
-- Test if VEP can be run through hail by opening up a python session with 'python3' and entering:
-```
-import hail as hl
-from gnomad.utils.vep import process_consequences
+b. Run VEP in Docker/Singularity
 
-hl.init(
-        log="test.log",
-        default_reference="GRCh38",
-        append=True,
-        min_block_size=1,
-        tmp_dir='/well/lindgren-ukbb/projects/ukbb-11867/flassen/spark',
-        local_tmpdir='/well/lindgren-ukbb/projects/ukbb-11867/flassen/spark',
-        master='local[%s]' % 1 # Required to prevent using more CPU resources than requested
-    )
+c. Generate the "worst consequence by gene (MANE SELECT canonical)" variants from the VEP output
 
-mt = hl.read_matrix_table("/well/lindgren-ukbb/projects/ukbb-11867/flassen/projects/KO/wes_ko_ukbb/data/unphased/wes/prefilter/200k/ukb_split_wes_200k_chr21_parents.mt")
-vep_mt = hl.vep(mt, "/well/lindgren-ukbb/projects/ukbb-11867/flassen/projects/KO/brava/variant-annotation/loftee.json")
->>> vep_mt.vep.most_severe_consequence
-<StringExpression of type str>
->>> vep_mt.vep.most_severe_consequence.show()
-+----------------+------------+--------------------------------------+
-| locus          | alleles    | <expr>                               |
-+----------------+------------+--------------------------------------+
-| locus<GRCh38>  | array<str> | str                                  |
-+----------------+------------+--------------------------------------+
-| chr21:10413617 | ["C","T"]  | "non_coding_transcript_exon_variant" |
-| chr21:10413618 | ["G","A"]  | "non_coding_transcript_exon_variant" |
-| chr21:10413624 | ["C","T"]  | "non_coding_transcript_exon_variant" |
-| chr21:10413627 | ["C","G"]  | "non_coding_transcript_exon_variant" |
-| chr21:10413629 | ["C","T"]  | "non_coding_transcript_exon_variant" |
-| chr21:10413631 | ["C","T"]  | "non_coding_transcript_exon_variant" |
-| chr21:10413633 | ["C","T"]  | "non_coding_transcript_exon_variant" |
-| chr21:10413634 | ["T","G"]  | "non_coding_transcript_exon_variant" |
-| chr21:10413636 | ["G","T"]  | "non_coding_transcript_exon_variant" |
-| chr21:10413638 | ["T","A"]  | "non_coding_transcript_exon_variant" |
-+----------------+------------+--------------------------------------+
-```
-
-
-
-
-
-###  dbNSFP plguin installation
-Guide adopted from [here](https://sites.google.com/site/jpopgen/dbNSFP).
-
-
-### LOFTEE plugin installation
-- Download LOFTEE:
-```
-git clone https://github.com/konradjk/loftee.git
-
-```
-- Download `human_ancestor_fa` dependency:
-```
-curl -O https://s3.amazonaws.com/bcbio_nextgen/human_ancestor.fa.gz
-curl -O https://s3.amazonaws.com/bcbio_nextgen/human_ancestor.fa.gz.fai
-curl -O https://s3.amazonaws.com/bcbio_nextgen/human_ancestor.fa.gz.gzi
-```
-
-- Download `conservation_file` dependency:
-```
-curl -O https://personal.broadinstitute.org/konradk/loftee_data/GRCh37/phylocsf_gerp.sql.gz
-```
-
-## 2. SpliceAI
-- This [fork](https://github.com/geertvandeweyer/SpliceAI) is recommended as it enables batching of variant annotations on the GPU 
+## 1B. SpliceAI
+- This [fork](https://github.com/geertvandeweyer/SpliceAI) is highly recommended as it enables batching of variant annotations on the GPU 
 - CPU performance: ~1k predictions per hour
-- GPU (A100 40GB) performance: ~700k predictions per hour
+- GPU (A100 40GB) performance: ~700k predictions per hour 🚀
 
 ### SpliceAI Batching parameters
 *When setting the batching parameters, be mindful of the system and gpu memory of the machine you are running the script on. Feel free to experiment, but some reasonable -T numbers would be 64/128. CPU memory is larger, and increasing -B might further improve performance.*
@@ -126,3 +42,11 @@ pip install tensorflow
 
 spliceai -I input.vcf -O output.vcf -R ./data/hg38.fa.gz -A ./data/SpliceAI/gencode.v39.ensembl.v105.annotation.txt.gz -B 4096 -T 256
 ```
+
+## 2. Creating SAIGE group files from VEP+SpliceAI
+
+Complete instructions and code provided in the [SAIGE-annotations-for-BRaVa repo](https://github.com/BRaVa-genetics/variant-annotation-python/tree/main)
+
+a. Pass your processed VEP file and your SpliceAI vcf file with the appropriate arguments
+
+b. Generate final SAIGE group files ready for analysis in [universal-saige](https://github.com/BRaVa-genetics/universal-saige/) ✅
