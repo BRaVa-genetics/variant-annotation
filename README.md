@@ -4,9 +4,9 @@ This repository contains all information and scripts required to generate SAIGE 
 
 1. Run VEP version 105 w/ LOFTEE v1.04_GRCh38 (Docker/Singularity provided).
 2. Run SpliceAI (batched version)
-3. Run the Python BRaVa annotation script to extract variant annotations [according to recommendations.](https://docs.google.com/document/d/11Nnb_nUjHnqKCkIB3SQAbR6fl66ICdeA-x_HyGWsBXM/edit#)
+3. Run the Python BRaVa annotation script to extract variant annotations [according to recommendations](https://docs.google.com/document/d/11Nnb_nUjHnqKCkIB3SQAbR6fl66ICdeA-x_HyGWsBXM/edit#) and generate SAIGE group files.
 
-## 1A. Running VEP
+## 1A. VEP
 
 Complete instructions and code provided in the [vep105_loftee repo](https://github.com/BRaVa-genetics/vep105_loftee)
 
