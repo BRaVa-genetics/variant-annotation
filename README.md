@@ -20,6 +20,7 @@ c. Generate the "worst consequence by gene (MANE SELECT canonical)" variants fro
 - This [fork](https://github.com/geertvandeweyer/SpliceAI) is highly recommended as it enables batching of variant annotations on the GPU 
 - CPU performance: ~1k predictions per hour
 - GPU (A100 40GB) performance: ~700k predictions per hour 🚀
+- [gencode.v39.ensembl.v105.annotation.txt.gz is hosted in this repo](https://github.com/BRaVa-genetics/variant-annotation/tree/main/data/SpliceAI)
 
 ### SpliceAI Batching parameters
 *When setting the batching parameters, be mindful of the system and gpu memory of the machine you are running the script on. Feel free to experiment, but some reasonable -T numbers would be 64/128. CPU memory is larger, and increasing -B might further improve performance.*
