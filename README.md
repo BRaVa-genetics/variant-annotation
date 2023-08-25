@@ -107,7 +107,7 @@ Complete instructions and code provided in the [SAIGE-annotations-for-BRaVa repo
 
 If you used our instructions for [**step 1**](#1-run-vep-version-105-with-loftee-v104_grch38), then you can save a lot of typing and run:
 ```
-python brava_create_annot.py -c chromosome -v path_to_vep_table -s path_to_SpliceAI_vcf -w output_file
+python brava_create_annot.py -c chromosome -v vep_table -s spliceai_vcf -w output_file
 ```
-after cloning the [SAIGE-annotations-for-BRaVa repo](https://github.com/BRaVa-genetics/SAIGE-annotations-for-BRaVa/tree/main) where,
-`path_to_vep_table` is the path to the (tab-delimited) VEP annotations text file from the output of [**step 1**](#1-run-vep-version-105-with-loftee-v104_grch38) and `path_to_SpliceAI_vcf` is the path to annotated output file from spliceAI, as all of the defaults for the VEP columns are set at the names in the output of [**step 1**](#1-run-vep-version-105-with-loftee-v104_grch38).
+after cloning the [SAIGE-annotations-for-BRaVa repository](https://github.com/BRaVa-genetics/SAIGE-annotations-for-BRaVa/tree/main) where,
+`vep_table` is the path to the (tab-delimited) VEP annotations text file from the output of [**step 1**](#1-run-vep-version-105-with-loftee-v104_grch38) and `spliceai_vcf` is the path to annotated output file from spliceAI, as all of the defaults for the VEP columns are set at the names in the output of [**step 1**](#1-run-vep-version-105-with-loftee-v104_grch38).
