@@ -23,7 +23,7 @@ export BCFTOOLS_PLUGINS=/path/to/bcftools/plugins
 
 ## 1. Run VEP version 105 with LOFTEE v1.04_GRCh38
 
-Complete instructions and code is provided in our [vep105_loftee repo](https://github.com/BRaVa-genetics/vep105_loftee). Briefly, the steps are:
+Complete instructions and code is provided in our [VEP 105 LOFTEE repository](https://github.com/BRaVa-genetics/vep105_loftee). Briefly, the steps are:
 
 - Download all of the required resources (cache etc...)
 - Run VEP in Docker/Singularity
@@ -32,7 +32,9 @@ Complete instructions and code is provided in our [vep105_loftee repo](https://g
 Don't forget to run the post-processing step which uses the split-vep plugin for BCFtools (this simply splits multiple transcript annotations for a given variant across multiple lines, creating a table with a constant number of columns).
 
 Following completion of [**step 1**](#1-run-vep-version-105-with-loftee-v104_grch38) for each of your vcfs, you should have a series of files containing the following columns:
+
 | SNP_ID | GENE | LOF | MAX_AF | REVEL_SCORE | CADD_PHRED | CSQ | TRANSCRIPT | MANE_SELECT | CANONICAL | BIOTYPE |
+| ------ | ---- | --- | ------ | ----------- | ---------- | --- | ---------- | ----------- | --------- | ------- | 
 
 We will use this output, together with the output of [**step 2**](#2-run-spliceai) to define our annotations according to the [recommendations](https://docs.google.com/document/d/11Nnb_nUjHnqKCkIB3SQAbR6fl66ICdeA-x_HyGWsBXM/edit#). Now, let's move onto **step 2**:
 
