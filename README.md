@@ -113,4 +113,4 @@ python SAIGE_annotations/brava_create_annot.py -c chromosome -v vep_table -s spl
 ```
 where, `vep_table` is the path to the (tab-delimited) VEP annotations text file from the output of [**step 1**](#1-run-vep-version-105-with-loftee-v104_grch38) and `spliceai_vcf` is the path to annotated output file from spliceAI in **step 2**, as all of the defaults for the VEP columns are set at the names in the output of [**step 1**](#1-run-vep-version-105-with-loftee-v104_grch38).
 
-Complete usage and requirements are in the [SAIGE-annotations-for-BRaVa repo](https://github.com/BRaVa-genetics/SAIGE-annotations-for-BRaVa/tree/main). Note that this script allows for your own choice of column names for each of the required VEP columns.
+Complete usage and requirements are in the [SAIGE_annotations folder]([https://github.com/BRaVa-genetics/SAIGE-annotations-for-BRaVa/tree/main](https://github.com/BRaVa-genetics/variant-annotation/tree/main/SAIGE_annotations)). Note that this script allows for your own choice of column names for each of the required VEP columns.
