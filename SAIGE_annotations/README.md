@@ -1,4 +1,4 @@
-# BRaVa SAIGE Annotation
+# BRaVa SAIGE annotation group-files
 
 *This repository is [step 3](https://github.com/BRaVa-genetics/variant-annotation#3-run-the-python-brava-annotation-script-to-extract-variant-annotations) of the [BRaVa annotation pipeline](https://github.com/BRaVa-genetics/variant-annotation).*
 
