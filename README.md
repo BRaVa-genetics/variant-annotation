@@ -1,9 +1,9 @@
-# BRaVa Variant Annotation
-This repository contains all information and scripts required to generate annotations ready to use for group tests in SAIGE-gene, and is split into three steps:
+# BRaVa variant annotation
+This repository contains all information and scripts required to generate annotation group-files ready to use for group tests in SAIGE-gene, and is split into three steps:
 
 1. Run VEP version 105 with LOFTEE v1.04_GRCh38 (Docker/Singularity provided), and post-process the resultant VEP annotated vcf
 2. Run SpliceAI
-3. Run the Python BRaVa annotation script to extract variant annotations [according to recommendations](https://docs.google.com/document/d/11Nnb_nUjHnqKCkIB3SQAbR6fl66ICdeA-x_HyGWsBXM/edit#), and generate SAIGE group files
+3. Run the Python BRaVa annotation script to extract variant annotations [according to recommendations](https://docs.google.com/document/d/11Nnb_nUjHnqKCkIB3SQAbR6fl66ICdeA-x_HyGWsBXM/edit#), and generate SAIGE annotation group-files
 
 Note, before [**step 1**](#1-run-vep-version-105-with-loftee-v104_grch38), first extract sites only vcf files ready for VEP annotation to avoid huge I/O overheads:
 ```
@@ -23,9 +23,9 @@ export BCFTOOLS_PLUGINS=/path/to/bcftools/plugins
 
 ## 1. Run VEP version 105 with LOFTEE v1.04_GRCh38
 
-Complete instructions and code is provided in our [VEP 105 LOFTEE repository](https://github.com/BRaVa-genetics/vep105_loftee). Briefly, the steps are:
+Complete instructions and code are provided in our [VEP 105 LOFTEE repository](https://github.com/BRaVa-genetics/vep105_loftee). Briefly, the steps are:
 
-- Download all of the required resources (cache etc...)
+- Download all of the required resources (cache etc)
 - Run VEP in Docker/Singularity
 - Post-process the file for input into [**step 3**](#3-run-the-python-brava-annotation-script-to-extract-variant-annotations)
 
@@ -51,7 +51,8 @@ Note that the required [gencode.v39.ensembl.v105.annotation.txt.gz](https://gith
 #### SpliceAI Batching parameters
 *When setting the batching parameters, be mindful of the system and GPU memory of the machine you are running the script on. Feel free to experiment, but some reasonable -T numbers would be 64/128/256. CPU memory is larger, and increasing -B might further improve performance.*
 
-#### Running SpliceAI (with Docker):
+#### Running batched SpliceAI (with Docker):
+First, navigate to the directory this README is located in. Then, run
 ```
 wget http://hgdownload.cse.ucsc.edu/goldenPath/hg38/bigZips/hg38.fa.gz -P ./data/
 docker pull cmgantwerpen/spliceai_v1.3
@@ -59,7 +60,8 @@ docker run --gpus all cmgantwerpen/spliceai_v1.3:latest spliceai -I input.vcf -O
 ```
 where `input.vcf` is the name of your (uncompressed) sites only vcf file for splice annotation, and `output.vcf` is is your desired output filename of the resultant annotated uncompressed vcf.
 
-#### Running SpliceAI (without Docker):
+#### Running batched SpliceAI (without Docker):
+First, navigate to the directory this README is located in. Then, run
 ```
 wget http://hgdownload.cse.ucsc.edu/goldenPath/hg38/bigZips/hg38.fa.gz -P ./data/
 
@@ -75,6 +77,7 @@ where `input.vcf` is the name of your (uncompressed) sites only vcf file for spl
 
 ### Vanilla SpliceAI
 #### Using pip
+First, navigate to the directory this README is located in. Then, run
 ```
 wget http://hgdownload.cse.ucsc.edu/goldenPath/hg38/bigZips/hg38.fa.gz -P ./data/
 
@@ -86,6 +89,7 @@ spliceai -I input.vcf -O output.vcf -R ./data/hg38.fa.gz -A ./data/SpliceAI/genc
 where `input.vcf` is the name of your (uncompressed) sites only vcf file for splice annotation and `output.vcf` is your desired output filename of the resultant annotated uncompressed vcf.
 
 #### Directly from Illumina's github repository
+First, navigate to the directory this README is located in. Then, run
 ```
 git clone https://github.com/Illumina/SpliceAI.git
 cd SpliceAI
@@ -101,13 +105,12 @@ Great, now you're here you should have a collection of SpliceAI annotated vcf fi
 
 ## 3. Run the Python BRaVa annotation script to extract variant annotations
 
-Complete instructions and code provided in the [SAIGE-annotations-for-BRaVa repo](https://github.com/BRaVa-genetics/SAIGE-annotations-for-BRaVa/tree/main).
-
-- Pass your processed (tab-delimited) VEP file and your SpliceAI vcf file with the appropriate arguments to generate SAIGE group files ready for analysis in [universal-saige](https://github.com/BRaVa-genetics/universal-saige/).
+Pass your processed (tab-delimited) VEP file and your SpliceAI vcf file with the appropriate arguments to generate SAIGE group files ready for analysis in [universal-saige](https://github.com/BRaVa-genetics/universal-saige/).
 
 If you used our instructions for [**step 1**](#1-run-vep-version-105-with-loftee-v104_grch38), then you can save a lot of typing and run:
 ```
-python brava_create_annot.py -c chromosome -v vep_table -s spliceai_vcf -w output_file
+python SAIGE_annotations/brava_create_annot.py -c chromosome -v vep_table -s spliceai_vcf -w output_file
 ```
-after cloning the [SAIGE-annotations-for-BRaVa repository](https://github.com/BRaVa-genetics/SAIGE-annotations-for-BRaVa/tree/main) where,
-`vep_table` is the path to the (tab-delimited) VEP annotations text file from the output of [**step 1**](#1-run-vep-version-105-with-loftee-v104_grch38) and `spliceai_vcf` is the path to annotated output file from spliceAI, as all of the defaults for the VEP columns are set at the names in the output of [**step 1**](#1-run-vep-version-105-with-loftee-v104_grch38).
+where, `vep_table` is the path to the (tab-delimited) VEP annotations text file from the output of [**step 1**](#1-run-vep-version-105-with-loftee-v104_grch38) and `spliceai_vcf` is the path to annotated output file from spliceAI in **step 2**, as all of the defaults for the VEP columns are set at the names in the output of [**step 1**](#1-run-vep-version-105-with-loftee-v104_grch38).
+
+Complete usage and requirements are in the [SAIGE-annotations-for-BRaVa repo](https://github.com/BRaVa-genetics/SAIGE-annotations-for-BRaVa/tree/main). Note that this script allows for your own choice of column names for each of the required VEP columns.
