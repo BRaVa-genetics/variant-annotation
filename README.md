@@ -1,9 +1,9 @@
 # BRaVa variant annotation
 This repository contains all information and scripts required to generate annotation group-files ready to use for group tests in SAIGE-gene, and is split into three steps:
 
-**Step 1.** Run VEP version 105 with LOFTEE v1.04_GRCh38 (Docker/Singularity provided), and post-process the resultant VEP annotated vcf
-**Step 2.** Run SpliceAI
-**Step 3.** Run the Python BRaVa annotation script to extract variant annotations [according to recommendations](https://docs.google.com/document/d/11Nnb_nUjHnqKCkIB3SQAbR6fl66ICdeA-x_HyGWsBXM/edit#), and generate SAIGE annotation group-files
+1. Run VEP version 105 with LOFTEE v1.04_GRCh38 (Docker/Singularity provided), and post-process the resultant VEP annotated vcf
+2. Run SpliceAI
+3. Run the Python BRaVa annotation script to extract variant annotations [according to recommendations](https://docs.google.com/document/d/11Nnb_nUjHnqKCkIB3SQAbR6fl66ICdeA-x_HyGWsBXM/edit#), and generate SAIGE annotation group-files
 
 Note, before [**step 1**](#1-run-vep-version-105-with-loftee-v104_grch38), first extract sites only vcf files ready for VEP annotation to avoid huge I/O overheads:
 ```
