@@ -1,6 +1,6 @@
 # BRaVa SAIGE Annotation
 
-*This repository is [part 3](https://github.com/BRaVa-genetics/variant-annotation#3-run-the-python-brava-annotation-script-to-extract-variant-annotations) of the full BRaVa annotation pipeline. Instructions for the full pipeline are [here](https://github.com/BRaVa-genetics/variant-annotation).*
+*This repository is [part 3](https://github.com/BRaVa-genetics/variant-annotation#3-run-the-python-brava-annotation-script-to-extract-variant-annotations) of the [BRaVa annotation pipeline](https://github.com/BRaVa-genetics/variant-annotation).*
 
 The python script in this repository merges VEP and SpliceAI information to generate a SAIGE annotation groupfile with annotations defined according to BRaVa's [guidelines](https://docs.google.com/document/d/11Nnb_nUjHnqKCkIB3SQAbR6fl66ICdeA-x_HyGWsBXM/edit#). The required inputs for the annotations by VEP and SpliceAI are table format files (tab-delimited).
 
