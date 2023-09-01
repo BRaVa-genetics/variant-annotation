@@ -109,7 +109,7 @@ Pass your processed (tab-delimited) VEP file and your SpliceAI vcf file with the
 
 If you used our instructions for [**step 1**](#1-run-vep-version-105-with-loftee-v104_grch38), then you can save a lot of typing and run:
 ```
-python SAIGE_annotations/brava_create_annot.py -c chromosome -v vep_table -s spliceai_vcf -w output_file
+python SAIGE_annotations/brava_create_annot.py -v vep_table -s spliceai_vcf -w output_file
 ```
 where, `vep_table` is the path to the (tab-delimited) VEP annotations text file from the output of [**step 1**](#1-run-vep-version-105-with-loftee-v104_grch38) and `spliceai_vcf` is the path to annotated output file from spliceAI in **step 2**, as all of the defaults for the VEP columns are set at the names in the output of [**step 1**](#1-run-vep-version-105-with-loftee-v104_grch38).
 
