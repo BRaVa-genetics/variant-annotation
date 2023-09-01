@@ -1,4 +1,17 @@
 # BRaVa variant annotation
+### Contents
+* [Introduction and pre-processing](#introduction-and-pre-processing)
+* [1. Run VEP version 105 with LOFTEE v1.04_GRCh38](#1-run-vep-version-105-with-loftee-v104_grch38)
+* [2. Run SpliceAI](#2-run-spliceai)
+  * [Batched version (recommended if GPUs are available!)](#batched-version-recommended-if-gpus-are-available)
+  * [SpliceAI Batching parameters](#spliceai-batching-parameters)
+    * [Running batched SpliceAI (with Docker):](#running-batched-spliceai-with-docker)
+    * [Running batched SpliceAI (without Docker):](#running-batched-spliceai-without-docker)
+  * [Vanilla SpliceAI](#vanilla-spliceai)
+    * [Using pip](#using-pip)
+    * [Directly from Illumina's github repository](#directly-from-illuminas-github-repository)
+* [3. Run the Python BRaVa annotation script to extract variant annotations](#3-run-the-python-brava-annotation-script-to-extract-variant-annotations)
+
 ## Introduction and pre-processing
 This repository contains all information and scripts required to generate annotation group-files ready to use for group tests in SAIGE-gene, and is split into three steps:
 
