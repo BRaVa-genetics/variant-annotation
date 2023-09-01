@@ -33,8 +33,8 @@ Don't forget to run the post-processing step which removes variants with gnomAD 
 
 Following completion of [**step 1**](#1-run-vep-version-105-with-loftee-v104_grch38) for each of your vcfs, you should have a series of files containing the following columns:
 
-| SNP_ID | GENE | LOF | MAX_AF | REVEL_SCORE | CADD_PHRED | CSQ | TRANSCRIPT | MANE_SELECT | CANONICAL | BIOTYPE |
-| ------ | ---- | --- | ------ | ----------- | ---------- | --- | ---------- | ----------- | --------- | ------- | 
+| SNP_ID | GENE | LOF | REVEL_SCORE | CADD_PHRED | CSQ | TRANSCRIPT | MANE_SELECT | CANONICAL | BIOTYPE |
+| ------ | ---- | --- | ----------- | ---------- | --- | ---------- | ----------- | --------- | ------- | 
 
 We will use this output, together with the output of [**step 2**](#2-run-spliceai) to define our annotations according to the [recommendations](https://docs.google.com/document/d/11Nnb_nUjHnqKCkIB3SQAbR6fl66ICdeA-x_HyGWsBXM/edit#). Now, let's move onto **step 2**:
 
