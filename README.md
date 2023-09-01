@@ -29,7 +29,7 @@ Complete instructions and code are provided in our [VEP 105 LOFTEE repository](h
 - Run VEP in Docker/Singularity
 - Post-process the file for input into [**step 3**](#3-run-the-python-brava-annotation-script-to-extract-variant-annotations)
 
-Don't forget to run the post-processing step which uses the split-vep plugin for BCFtools (this simply splits multiple transcript annotations for a given variant across multiple lines, creating a table with a constant number of columns).
+Don't forget to run the post-processing step which removes variants with gnomAD [popmax](https://gnomad.broadinstitute.org/help/popmax) > 0.01 and uses the split-vep plugin for BCFtools (this simply splits multiple transcript annotations for a given variant across multiple lines, creating a table with a constant number of columns).
 
 Following completion of [**step 1**](#1-run-vep-version-105-with-loftee-v104_grch38) for each of your vcfs, you should have a series of files containing the following columns:
 
