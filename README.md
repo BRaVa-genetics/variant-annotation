@@ -5,9 +5,9 @@ This repository contains all information and scripts required to generate annota
 2. Run SpliceAI
 3. Run the Python BRaVa annotation script to extract variant annotations [according to recommendations](https://docs.google.com/document/d/11Nnb_nUjHnqKCkIB3SQAbR6fl66ICdeA-x_HyGWsBXM/edit#), and generate SAIGE annotation group-files
 
-Note, before [**step 1**](#1-run-vep-version-105-with-loftee-v104_grch38), first extract sites only vcf files ready for VEP annotation to avoid huge I/O overheads:
+Note, before [**step 1**](#1-run-vep-version-105-with-loftee-v104_grch38), ensure that the VCF has split multiallelics, that variant IDs are of the form `CHROM:POS:REF:ALT`, and that you extract sites only vcf files from these, ready for VEP annotation to avoid huge I/O overheads:
 ```
-bcftools view --drop-genotypes input.vcf.gz -O z -o sites_only_output.vcf.gz
+bcftools view --drop-genotypes input.vcf.gz -O z -o sites_only_input.vcf.gz
 ```
 where `input.vcf.gz` is your vcf file including genotype information that we wish to annotate, and `sites_only_output.vcf.gz` is the name of the compressed vcf file with all the genotype information from the samples removed.
 
