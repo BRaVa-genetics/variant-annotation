@@ -6,17 +6,14 @@ import pandas as pd
 import argparse
 
 parser = argparse.ArgumentParser(description="Merge VEP with SpliceAI info and generate annotations according to BRaVa's guidelines.")
-parser.add_argument("--chr", "-c", help="which chromosome to precess", required=True, type=str)
 parser.add_argument("--vep", "-v", help="file with VEP annotation (tab-delimited)", required=True, type=str)
 parser.add_argument("--spliceai", "-s", help="VCF file with SpliceAI annotations", required=True, type=str)
 parser.add_argument("--out_file", "-w", help="SAIGE output file", required=True, type=str)
-parser.add_argument("--maf_cutoff", help="only keep MAX pop AF < maf_cutoff", type=float, default=0.01)
 
 # Columns to read (VEP)
 parser.add_argument("--vep_snp_id_col", help="SNPID (chr:pos:ref:alt) column in VEP table", required=True, type=str, default="SNP_ID)
 parser.add_argument("--vep_gene_col", help="GENEID column in VEP table", required=True, type=str, default="GENE")
 parser.add_argument("--vep_lof_col", help="LoF column in VEP table", required=True, type=str, default="LOF")
-parser.add_argument("--vep_max_pop_col", help="gnomAD_maxAF column in VEP table", required=True, type=str, default="MAX_AF")
 parser.add_argument("--vep_revel_col", help="REVEL column in VEP table", required=True, type=str, default="REVEL_SCORE")
 parser.add_argument("--vep_cadd_phred_col", help="CADD_PHRED column in VEP table", required=True, type=str, default="CADD_PHRED")
 parser.add_argument("--vep_consequence_col", help="Consequence column in VEP table", required=True, type=str, default="CSQ")
@@ -128,7 +125,6 @@ def write_saige_file(vep_df, out_file):
             fout.write(f"{gene_id} anno {annos}\n")
     
 if __name__=='__main__':
-    print("Will make the annotation file for chrom-" + args.chr)
 
     vep_cols_to_read = [args.vep_snp_id_col, args.vep_gene_col, args.vep_lof_col, args.vep_max_pop_col,
                         args.vep_revel_col, args.vep_cadd_phred_col, args.vep_consequence_col,
@@ -136,12 +132,8 @@ if __name__=='__main__':
 
     # encoding specified to prevent certain read error - https://github.com/BRaVa-genetics/variant-annotation-python/pull/3#issuecomment-1661885882
     vep_df = pd.read_csv(args.vep, sep=' ', usecols=vep_cols_to_read, na_values='.', encoding='cp1252')
-    
-    # Fixes issue relating to missing chr prefix in snp_id
-    #vep_df[args.vep_snp_id_col] = "chr" + vep_df[args.vep_snp_id_col]
 
     # Filter raw VEP output to canonical, protein_coding transcripts
-
     num_total_rows = vep_df.shape[0]
     vep_df = vep_df[(vep_df[args.vep_biotype_col] == "protein_coding") &
                     ((~vep_df[args.vep_mane_select_col].isna()) |
@@ -162,13 +154,7 @@ if __name__=='__main__':
         return np.nan
 
     vep_df[args.vep_revel_col] = vep_df[args.vep_revel_col].apply(get_single_unique_revel)
-
-    # gnomAD maxAF FILTER
-    num_total_rows = vep_df.shape[0]
-    vep_df = vep_df[(vep_df[args.vep_max_pop_col] <= args.maf_cutoff) | (vep_df[args.vep_max_pop_col].isna())]
-    num_kept_rows = vep_df.shape[0]
-    print(f"gnomAD FILTER: {num_kept_rows} out of {num_total_rows} remaining")
-
+  
     spliceai_df = pd.read_csv(args.spliceai, sep='\t', comment='#', header=None, names=["CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO"], na_values='.')
 
     # Redefine ID
