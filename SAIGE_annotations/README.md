@@ -16,7 +16,7 @@ This script requires `numpy` and `pandas` to be installed in your Python environ
 python brava_create_annot.py -v vep_table -s spliceai_vcf -w output_file --vep_snp_id_col snp_id_col --vep_gene_col gene_id_col --vep_lof_col lof_col --vep_revel_col revel_col --vep_cadd_phred_col cadd_col --vep_consequence_col csq_col --vep_canonical_col canonical_col --vep_biotype_col biotype_col --vep_mane_select_col mane_select_col
 ```
 
-Note that if you followed our [**step 1**](https://github.com/BRaVa-genetics/variant-annotation#1-run-vep-version-105-with-loftee-v104_grch38) commands, you won't need to use any arguments other than `-c`, `-v`, `-s` and `-w`, as these are set at the defaults.
+Note that if you followed our [**step 1**](https://github.com/BRaVa-genetics/variant-annotation#1-run-vep-version-105-with-loftee-v104_grch38) commands, you won't need to use any arguments other than `-v`, `-s` and `-w`, as these are set at the defaults.
 
 ## Arguments
 
