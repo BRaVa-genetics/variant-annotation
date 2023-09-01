@@ -13,21 +13,19 @@ This script requires `numpy` and `pandas` to be installed in your Python environ
 ## Usage
 
 ```bash
-python brava_create_annot.py -c chr -v vep_table -s spliceai_vcf -w output_file --vep_snp_id_col snp_id_col --vep_gene_col gene_id_col --vep_lof_col lof_col --vep_max_pop_col gnomad_popmax_AF_col --vep_revel_col revel_col --vep_cadd_phred_col cadd_col --vep_consequence_col csq_col --vep_canonical_col canonical_col --vep_biotype_col biotype_col --vep_mane_select_col mane_select_col
+python brava_create_annot.py -v vep_table -s spliceai_vcf -w output_file --vep_snp_id_col snp_id_col --vep_gene_col gene_id_col --vep_lof_col lof_col --vep_revel_col revel_col --vep_cadd_phred_col cadd_col --vep_consequence_col csq_col --vep_canonical_col canonical_col --vep_biotype_col biotype_col --vep_mane_select_col mane_select_col
 ```
 
 Note that if you followed our [**step 1**](https://github.com/BRaVa-genetics/variant-annotation#1-run-vep-version-105-with-loftee-v104_grch38) commands, you won't need to use any arguments other than `-c`, `-v`, `-s` and `-w`, as these are set at the defaults.
 
 ## Arguments
 
-* `-c/--chr`: chromosome to process.
 * `-v/--vep`: file path to the (tab-delimited) VEP annotated table ([**step 1**](https://github.com/BRaVa-genetics/variant-annotation#1-run-vep-version-105-with-loftee-v104_grch38) output)
 * `-s/--spliceai`: file path to the SpliceAI annotated vcf file ([**step 2**](https://github.com/BRaVa-genetics/variant-annotation#2-run-spliceai) output).
 * `-w/--out_file`: output file where the results will be saved
 * `--vep_snp_id_col`: SNP ID (chr:pos:ref:alt) column in the VEP annotated table
 * `--vep_gene_col`: Gene ID column in the VEP annotated table
 * `--vep_lof_col`: LoF column in the VEP annotated table
-* `--vep_max_pop_col`: gnomAD_maxAF column in the VEP annotated table
 * `--vep_revel_col`: REVEL column in the VEP annotated table
 * `--vep_cadd_phred_col`: Phred scaled CADD score column in the VEP annotated table
 * `--vep_consequence_col`: consequence column in the VEP annotated table
