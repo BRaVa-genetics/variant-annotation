@@ -11,7 +11,7 @@ parser.add_argument("--spliceai", "-s", help="VCF file with SpliceAI annotations
 parser.add_argument("--out_file", "-w", help="SAIGE output file", required=True, type=str)
 
 # Columns to read (VEP)
-parser.add_argument("--vep_snp_id_col", help="SNPID (chr:pos:ref:alt) column in VEP table", required=True, type=str, default="SNP_ID)
+parser.add_argument("--vep_snp_id_col", help="SNPID (chr:pos:ref:alt) column in VEP table", required=True, type=str, default="SNP_ID")
 parser.add_argument("--vep_gene_col", help="GENEID column in VEP table", required=True, type=str, default="GENE")
 parser.add_argument("--vep_lof_col", help="LoF column in VEP table", required=True, type=str, default="LOF")
 parser.add_argument("--vep_revel_col", help="REVEL column in VEP table", required=True, type=str, default="REVEL_SCORE")
