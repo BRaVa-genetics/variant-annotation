@@ -11,15 +11,15 @@ parser.add_argument("--spliceai", "-s", help="VCF file with SpliceAI annotations
 parser.add_argument("--out_file", "-w", help="SAIGE output file", required=True, type=str)
 
 # Columns to read (VEP)
-parser.add_argument("--vep_snp_id_col", help="SNPID (chr:pos:ref:alt) column in VEP table", required=True, type=str, default="SNP_ID")
-parser.add_argument("--vep_gene_col", help="GENEID column in VEP table", required=True, type=str, default="GENE")
-parser.add_argument("--vep_lof_col", help="LoF column in VEP table", required=True, type=str, default="LOF")
-parser.add_argument("--vep_revel_col", help="REVEL column in VEP table", required=True, type=str, default="REVEL_SCORE")
-parser.add_argument("--vep_cadd_phred_col", help="CADD_PHRED column in VEP table", required=True, type=str, default="CADD_PHRED")
-parser.add_argument("--vep_consequence_col", help="Consequence column in VEP table", required=True, type=str, default="CSQ")
-parser.add_argument("--vep_canonical_col", help="Canonical column in VEP table", required=True, type=str, default="CANONICAL")
-parser.add_argument("--vep_biotype_col", help="Biotype column in VEP table", required=True, type=str, default="BIOTYPE")
-parser.add_argument("--vep_mane_select_col", help="MANE Select column in VEP table", required=True, type=str, default="MANE_SELECT")
+parser.add_argument("--vep_snp_id_col", help="SNPID (chr:pos:ref:alt) column in VEP table", required=False, type=str, default="SNP_ID")
+parser.add_argument("--vep_gene_col", help="GENEID column in VEP table", required=False, type=str, default="GENE")
+parser.add_argument("--vep_lof_col", help="LoF column in VEP table", required=False, type=str, default="LOF")
+parser.add_argument("--vep_revel_col", help="REVEL column in VEP table", required=False, type=str, default="REVEL_SCORE")
+parser.add_argument("--vep_cadd_phred_col", help="CADD_PHRED column in VEP table", required=False, type=str, default="CADD_PHRED")
+parser.add_argument("--vep_consequence_col", help="Consequence column in VEP table", required=False, type=str, default="CSQ")
+parser.add_argument("--vep_canonical_col", help="Canonical column in VEP table", required=False, type=str, default="CANONICAL")
+parser.add_argument("--vep_biotype_col", help="Biotype column in VEP table", required=False, type=str, default="BIOTYPE")
+parser.add_argument("--vep_mane_select_col", help="MANE Select column in VEP table", required=False, type=str, default="MANE_SELECT")
 
 args = parser.parse_args()
 
@@ -126,7 +126,7 @@ def write_saige_file(vep_df, out_file):
     
 if __name__=='__main__':
 
-    vep_cols_to_read = [args.vep_snp_id_col, args.vep_gene_col, args.vep_lof_col, args.vep_max_pop_col,
+    vep_cols_to_read = [args.vep_snp_id_col, args.vep_gene_col, args.vep_lof_col,
                         args.vep_revel_col, args.vep_cadd_phred_col, args.vep_consequence_col,
                         args.vep_canonical_col, args.vep_biotype_col, args.vep_mane_select_col]
 
