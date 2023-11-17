@@ -192,4 +192,5 @@ if __name__=='__main__':
     print(f"empty annotation FILTER: {num_kept_rows} out of {num_total_rows} remaining") 
 
     print(vep_df["annotation"].value_counts())
+    vep_df.to_csv(args.out_file + '.long.csv.gz', index=False, compression='gzip')
     write_saige_file(vep_df, args.out_file)
