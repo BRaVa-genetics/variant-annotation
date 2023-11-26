@@ -183,6 +183,12 @@ if __name__=='__main__':
     # Now generate the annotations
     vep_df = vep_df.merge(spliceai_df, left_on=[args.vep_snp_id_col, args.vep_gene_col], right_on=["ID", "GENE"], how='left')
     
+    # if no SpliceAI scores - raise an exception as an unsuccessful merge can be hard to spot
+    if len(vep_df[~vep_df['max_DS'].isna()]) == 0:
+        raise Exception("""No max_DS SpliceAI scores detected!
+            Check variant ID merging between spliceAI and VEP information.
+            Perhaps chrCHR:POS:REF:ALT vs CHR:POS:REF:ALT or vice versa""")
+
     vep_df["annotation"] = vep_df.apply(get_annotation, axis=1)
 
     # no annotation FILTER
