@@ -117,7 +117,37 @@ where `input.vcf` is the name of your (uncompressed) sites only vcf file for spl
 
 Great, now you're here you should have a collection of SpliceAI annotated vcf files, and a collection of tab delimited text files munged from the output of VEP. We can now combine these and generate the annotations for input into gene-based testing in the next step:
 
-## 3. Run the Python BRaVa annotation script to extract variant annotations
+## 3. Running CADD for indels
+
+Unfortunately VEP uses cached CADD results and does not support indels so we have to score these ourselves. 
+
+```
+# download cadd
+mkdir -p cadd && wget -O- https://github.com/kircherlab/CADD-scripts/archive/refs/tags/v1.6.post1.tar.gz | tar -xz --strip-components=1 -C cadd
+cd cadd
+
+# download annotations (~3hr, ~200GB)
+wget -c https://krishna.gs.washington.edu/download/CADD/v1.6/GRCh38/annotationsGRCh38_v1.6.tar.gz -P data/annotations
+tar -xzvf data/annotations/annotationsGRCh38_v1.6.tar.gz -C data/annotations
+
+# setup environment (assuming conda >= 4.4.0
+conda create -n cadd python=3.8 snakemake mamba -c conda-forge -c bioconda
+conda activate cadd
+snakemake test/input.tsv.gz --use-conda --conda-create-envs-only --conda-prefix envs --cores 1 --configfile config/config_GRCh38_v1.6.yml --snakefile Snakefile
+
+# process vcf (indel only + strip chr prefix)
+bcftools view -v indels file.vcf.gz -Ov -o file_indelsonly.vcf
+sed 's/^chr//' file_indelsonly.vcf > file_indelsonly_nochrprefix.vcf
+
+# finally you should be able to run CADD!
+
+./cadd.sh file_indelsonly_nochrprefix.vcf
+
+```
+
+CADD should run at about 30 variants a second, and the output will be a gzipped tsv. 
+
+## 4. Run the Python BRaVa annotation script to extract variant annotations
 
 Pass your processed (tab-delimited) VEP file and your SpliceAI vcf file with the appropriate arguments to generate SAIGE group files ready for analysis in [universal-saige](https://github.com/BRaVa-genetics/universal-saige/).
 
