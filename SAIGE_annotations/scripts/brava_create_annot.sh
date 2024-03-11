@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #SBATCH --account=lindgren.prj
 #SBATCH --job-name=annotate
-#SBATCH --chdir=/well/lindgren/barney/brava-ground-truth-annotations/SAIGE-annotations-for-BRaVa/
+#SBATCH --chdir=/well/lindgren/barney/brava/SAIGE-annotations-for-BRaVa/
 #SBATCH --output=logs/annotate.log
 #SBATCH --error=logs/annotate.errors.log
 #SBATCH --partition=short
@@ -47,13 +47,13 @@ get_chr() {
 readonly array_idx=$( get_array_task_id )
 readonly chr=$( get_chr ${array_idx} )
 
-readonly vep="/well/lindgren/barney/variant-annotation/run-vep/out/ukb_wes_450k.qced.chr${chr}.vep_processed.txt"
+readonly vep="/well/lindgren/barney/brava/vep105_loftee/out/sites_only_output_chr${chr}_vep.gnomad_popmax_0.01_processed.txt"
 
 readonly spliceai_dir="/well/lindgren/barney/spliceai/out"
 readonly spliceai_path="${spliceai_dir}/ukb_wes_450k.qced.v6.sites_only.${chr}.all.vcf"
 
 readonly out_dir="data/out"
-readonly out_file="${out_dir}/ukb_wes_450k.july.qced.brava_common_rare.v7.chr${chr}.saige.txt"
+readonly out_file="${out_dir}/ukb_wes_450k.july.qced.v8.chr${chr}_indels.saige.txt"
 
 readonly vep_snp_id_col="SNP_ID"
 readonly vep_gene_col="GENE"
@@ -65,12 +65,13 @@ readonly vep_consequence_col="CSQ"
 readonly vep_canonical_col="CANONICAL"
 readonly vep_biotype_col="BIOTYPE"
 
+readonly cadd_indels="/well/lindgren/barney/brava/vep105_loftee/out/sites_only_output_chr${chr}_vep_indels.tsv.gz"
+
 mkdir -p ${out_dir}
 
 . ~/job-scripts/conda.sh base
 
 python3 scripts/brava_create_annot.py \
-    --chr=$chr \
     --vep=$vep \
     --spliceai=$spliceai_path \
     --out_file=$out_file \
@@ -82,6 +83,7 @@ python3 scripts/brava_create_annot.py \
     --vep_cadd_phred_col=$vep_cadd_phred_col \
     --vep_consequence_col=$vep_consequence_col \
     --vep_canonical_col=$vep_canonical_col \
-    --vep_biotype_col=$vep_biotype_col
+    --vep_biotype_col=$vep_biotype_col \
+    --cadd_indels=$cadd_indels
 
 gzip $out_file

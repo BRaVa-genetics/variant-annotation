@@ -32,4 +32,4 @@ Note that if you followed our [**step 1**](https://github.com/BRaVa-genetics/var
 * `--vep_canonical_col`: canonical transcript column in the VEP annotated table
 * `--vep_biotype_col`: biotype column in the VEP annotated table
 * `--vep_mane_select_col`: MANE select column in the VEP annotated table (not that this the column that annotates the name of the transcript, not a boolean identifier of whether the annotated transcript is MANE select (annotated using the `--mane-select` flag))
-
+* `--cadd_indels`: (optional) file path to the CADD indels file
