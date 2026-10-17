@@ -1,45 +1,24 @@
 #!/bin/bash
-
-#SBATCH -J annot_long
-#SBATCH -o annot_long-%A_%a.out
-#SBATCH -e annot_long-%A_%a.err
+#SBATCH -J brava_annot
+#SBATCH -o brava_annot-%A_%a.out
 #SBATCH -p short
+#SBATCH --mem=8G
 #SBATCH --array=1-23
+# Example: steps 4 and 5 for every chromosome as a SLURM array (task 23 = chrX). Edit the paths below.
+set -euo pipefail
 
-echo "------------------------------------------------"
-echo "Run on host: "`hostname`
-echo "Operating system: "`uname -s`
-echo "Username: "`whoami`
-echo "Started at: "`date`
-echo "------------------------------------------------"
+repo=/path/to/variant-annotation
+us=/path/to/universal-saige                                    # resources/ from download_resources.sh --alphamissense
+vep_dir=/path/to/vep105_loftee/out                             # step 1 tables
+sai2=/path/to/spliceai2                                        # step 2: scores/ and gpu/
+out_dir=/path/to/group_files
 
-# Load R module
-module purge
-module load BCFtools
-
-spliceai_dir="/well/lindgren/barney/spliceai/out"
-vep_annotations_dir="/well/lindgren/barney/variant-annotation/run-vep/out"
-out_dir="/well/lindgren/UKBIOBANK/dpalmer/annotation_munging"
-annotation_repo_dir="/well/lindgren/UKBIOBANK/dpalmer/variant-annotation"
-brava_create_annot="${annotation_repo_dir}/SAIGE_annotations/scripts/brava_create_annot.py"
-
-SLURM_ARRAY_TASK_ID=21
-
-mkdir -p ${out_dir}
-
-# Map SLURM_ARRAY_TASK_ID to chromosome
-if [ "$SLURM_ARRAY_TASK_ID" -eq 23 ]
-then
-    chr="X"
-else
-    chr="$SLURM_ARRAY_TASK_ID"
-fi
-
-vep="${vep_annotations_dir}/ukb_wes_450k.qced.chr${chr}.vep_processed.txt"
-spliceai="${spliceai_dir}/ukb_wes_450k.qced.v6.sites_only.${chr}.all.vcf"
-spliceai_no_chr="${out_dir}/ukb_wes_450k.qced.v6.sites_only.no_chr.${chr}.all.vcf.gz"
-out="${out_dir}/ukb_wes_450k.july.qced.brava_common_rare.v7.chr${chr}.saige.txt"
-
-# First, remove the chr from the CHROM column
-bcftools annotate --rename-chrs <(echo -e "chr${chr}\t${chr}") ${spliceai} -O z -o ${spliceai_no_chr}
-python3 ${brava_create_annot} --vep ${vep} --spliceai ${spliceai_no_chr} --out_file $out
+c=${SLURM_ARRAY_TASK_ID}; [[ $c -eq 23 ]] && c=X
+mkdir -p "$out_dir"
+g=$out_dir/brava.chr$c.saige_group.txt.gz
+python3 "$repo/SAIGE_annotations/scripts/brava_create_annot.py" \
+    -v "$vep_dir/sites_only_output_chr${c}_vep.gnomad_popmax_0.01_processed.txt" \
+    --spliceai2 $(ls "$sai2"/scores/chr$c.{snv,indel}.tsv.gz "$sai2"/gpu/chunk_*.scores.tsv.gz 2>/dev/null) \
+    --gtf "$us/resources/gencode.v39.annotation.gtf.gz" \
+    -w "$g"
+bash "$repo/SAIGE_annotations/scripts/alphamissense_files.sh" "$us" "$g" "$c"
