@@ -1,262 +1,419 @@
-#!/usr/bin/env python
-# coding: utf-8
+#!/usr/bin/env python3
+"""BRaVa annotation: VEP 105 + LOFTEE table and SpliceAI2 (or SpliceAI v1) scores -> SAIGE group file + long table.
 
-import numpy as np
-import pandas as pd
-import argparse
+One label per (gene, variant), on the gene's MANE Select transcript, else its canonical one (protein-coding only).
+The first rule that applies wins (October 2026 rules):
 
-parser = argparse.ArgumentParser(
-    description="Merge VEP with SpliceAI info and generate annotations according to BRaVa's guidelines.")
-parser.add_argument(
-    "--vep", "-v", help="file with VEP annotation (tab-delimited)", required=True, type=str)
-parser.add_argument("--spliceai", "-s",
-                    help="VCF file with SpliceAI annotations", required=True, type=str)
-parser.add_argument("--out_file", "-w",
-                    help="SAIGE output file", required=True, type=str)
-parser.add_argument("--cadd_indels",
-                    help="CADD indels file", required=False, type=str)
+  pLoF               LOFTEE high confidence (HC)
+  damaging_missense  a missense-type consequence and (REVEL >= 0.773 or CADD >= 28.1); or LOFTEE low confidence (LC)
+  spliceai2_gt040    SpliceAI2 >= 0.40 (with --spliceai: spliceai_gt05, SpliceAI v1 DS >= 0.5)
+  other_missense     any other missense-type consequence
+  synonymous         synonymous with SpliceAI2 < 0.10 (v1: DS < 0.2)
+  non_coding         everything else, including synonymous with SpliceAI2 0.10-0.40 (v1: DS 0.2-0.5)
 
-# Columns to read (VEP)
-parser.add_argument("--vep_snp_id_col", help="SNPID (chr:pos:ref:alt) column in VEP table",
-                    required=False, type=str, default="SNP_ID")
-parser.add_argument("--vep_gene_col", help="GENEID column in VEP table",
-                    required=False, type=str, default="GENE")
-parser.add_argument("--vep_lof_col", help="LoF column in VEP table",
-                    required=False, type=str, default="LOF")
-parser.add_argument("--vep_revel_col", help="REVEL column in VEP table",
-                    required=False, type=str, default="REVEL_SCORE")
-parser.add_argument("--vep_cadd_phred_col", help="CADD_PHRED column in VEP table",
-                    required=False, type=str, default="CADD_PHRED")
-parser.add_argument("--vep_consequence_col", help="Consequence column in VEP table",
-                    required=False, type=str, default="CSQ")
-parser.add_argument("--vep_canonical_col", help="Canonical column in VEP table",
-                    required=False, type=str, default="CANONICAL")
-parser.add_argument("--vep_biotype_col", help="Biotype column in VEP table",
-                    required=False, type=str, default="BIOTYPE")
-parser.add_argument("--vep_mane_select_col", help="MANE Select column in VEP table",
-                    required=False, type=str, default="MANE_SELECT")
+Missense-type: missense_variant, inframe_insertion, inframe_deletion, start_lost, stop_lost,
+protein_altering_variant, transcript_amplification. A consequence such as 'missense_variant&splice_region_variant'
+belongs to a class when any of its '&'-joined terms does (as BRaVa's script has always done). Non-coding terms are
+tested before synonymous ones, so 'synonymous_variant&intron_variant' is non_coding.
 
-args = parser.parse_args()
+What changed from the 2023 rules: SpliceAI no longer routes into damaging_missense (SpliceAI >= 0.2 did); it is its
+own category, at a cut-off calibrated to ACMG/AMP PP3 Moderate (the same evidence level as REVEL 0.773 / CADD 28.1);
+the labels are the short names; a variant matching no class is non_coding and stays in the group file. A variant
+without a SpliceAI score has no splice route. SpliceAI2 and v1 scores are never mixed: one run uses one model.
 
-PLOF_CSQS = ["transcript_ablation", "splice_acceptor_variant",
-             "splice_donor_variant", "stop_gained", "frameshift_variant"]
+SpliceAI2 scores each position once per strand, not per gene: an entry takes the score on its gene's strand
+(GENCODE v39), and only when the variant lies inside the gene's v39 span (the 'gene-body rule': SpliceAI v1 only
+reports genes whose body contains the variant). Otherwise the score is kept in DS_MAX with SPLICEAI_SOURCE
+'spliceai2_outside_gene' and gives no splice route.
 
+Outputs:
+  OUT                     SAIGE group file: per gene a 'GENE var ...' and a 'GENE anno ...' line (gzip if OUT ends .gz)
+  OUT.long.tsv.gz         one row per (gene, variant) with every field its label came from; the --annoTable input of
+                          universal-saige's 04_flexrv_groupfile.sh
 
-MISSENSE_CSQS = ["stop_lost", "start_lost", "transcript_amplification",
-                 "inframe_insertion", "inframe_deletion", "missense_variant",
-                 "protein_altering_variant"]
+usage: brava_create_annot.py -v VEP_TABLE (--spliceai2 SCORES.tsv.gz [...] --gtf GENCODE_V39.gtf.gz | -s SPLICEAI.vcf)
+                             -w OUT [--cadd_indels CADD.tsv.gz] [--vep_*_col NAME ...]
+       brava_create_annot.py --selftest
+"""
+import argparse, gzip, os, re, sys, tempfile
+from collections import Counter, OrderedDict
 
+PLOF_CSQS = ["transcript_ablation", "splice_acceptor_variant", "splice_donor_variant", "stop_gained", "frameshift_variant"]
+MISSENSE_CSQS = ["stop_lost", "start_lost", "transcript_amplification", "inframe_insertion", "inframe_deletion",
+                 "missense_variant", "protein_altering_variant"]
 SYNONYMOUS_CSQS = ["stop_retained_variant", "synonymous_variant"]
-
-OTHER_CSQS = ["mature_miRNA_variant", "5_prime_UTR_variant",
-              "3_prime_UTR_variant", "non_coding_transcript_exon_variant", "intron_variant",
-              "NMD_transcript_variant", "non_coding_transcript_variant", "upstream_gene_variant",
+OTHER_CSQS = ["mature_miRNA_variant", "5_prime_UTR_variant", "3_prime_UTR_variant", "non_coding_transcript_exon_variant",
+              "intron_variant", "NMD_transcript_variant", "non_coding_transcript_variant", "upstream_gene_variant",
               "downstream_gene_variant", "TFBS_ablation", "TFBS_amplification", "TF_binding_site_variant",
               "regulatory_region_ablation", "regulatory_region_amplification", "feature_elongation",
               "regulatory_region_variant", "feature_truncation", "intergenic_variant"]
-
 INFRAME_CSQS = ["inframe_deletion", "inframe_insertion"]
+# LOFTEE gives every one of these an HC or LC call on a protein-coding transcript; a row with one of them and no
+# call means LOFTEE failed on that variant (seen with VEP --fork: its SQLite conservation database fails to read)
+LOFTEE_CSQS = ["stop_gained", "frameshift_variant", "splice_donor_variant", "splice_acceptor_variant"]
+
+REVEL_CUTOFF, CADD_CUTOFF = 0.773, 28.1
+# SpliceAI cut-offs (October 2026). SpliceAI2: 0.40 is its ACMG/AMP Moderate cut-off from our calibration (Illumina's
+# README pairs 0.25 with v1's 0.5, but 0.25 sits at Supporting); 0.10 is the README's equivalent of v1's 0.2.
+# SpliceAI v1: 0.5 (Moderate in the same calibration) and 0.2 (BRaVa's earlier cut-off).
+MODELS = {"spliceai2": dict(t_hi=0.40, t_lo=0.10, label="spliceai2_gt040"),
+          "spliceai": dict(t_hi=0.50, t_lo=0.20, label="spliceai_gt05")}
+NAN = float("nan")
+LONG_COLS = ["ID", "GENE", "LOF", "REVEL_SCORE", "CADD_PHRED", "CSQ", "TRANSCRIPT", "MANE_SELECT", "CANONICAL",
+             "BIOTYPE", "DS_MAX", "SPLICEAI_SOURCE", "ANNOTATION"]
+DEFAULT_COLS = dict(vep_snp_id_col="SNP_ID", vep_gene_col="GENE", vep_lof_col="LOF", vep_revel_col="REVEL_SCORE",
+                    vep_cadd_phred_col="CADD_PHRED", vep_consequence_col="CSQ", vep_transcript_col="TRANSCRIPT",
+                    vep_mane_select_col="MANE_SELECT", vep_canonical_col="CANONICAL", vep_biotype_col="BIOTYPE")
 
 
-def get_annotation(variant):
-    """
-    A function to assign variants to a class according to BRAVA's guidelines
-    """
-    cadd_cutoff = 28.1
-    revel_cutoff = 0.773
-    spliceai_cutoff = 0.20
-
-    consequences = variant[args.vep_consequence_col].split('&')
-
-    missense_variant = any(
-        consequence in MISSENSE_CSQS for consequence in consequences)
-    synonymous_variant = any(
-        consequence in SYNONYMOUS_CSQS for consequence in consequences)
-    other_variant = any(
-        consequence in OTHER_CSQS for consequence in consequences)
-    inframe_variant = any(
-        consequence in INFRAME_CSQS for consequence in consequences)
-
-    if variant[args.vep_lof_col] == 'HC':
-        annot = 'pLoF'
-    elif missense_variant and (variant[args.vep_revel_col] >= revel_cutoff or variant[args.vep_cadd_phred_col] >= cadd_cutoff):
-        annot = 'damaging_missense_or_protein_altering'
-    elif variant['max_DS'] >= spliceai_cutoff:
-        annot = 'damaging_missense_or_protein_altering'
-    elif variant[args.vep_lof_col] == 'LC':
-        annot = 'damaging_missense_or_protein_altering'
-    elif missense_variant or inframe_variant:
-        annot = 'other_missense_or_protein_altering'
-    elif other_variant:
-        annot = 'non_coding'
-    elif synonymous_variant:
-        annot = 'synonymous'
-    else:
-        annot = ''
-
-    return annot
+def opn(p, mode="rt"):
+    return gzip.open(p, mode) if p.endswith((".gz", ".bgz")) else open(p, mode)
 
 
-def get_spliceAI_DS(value):
-    """
-    Extract the DS_max from the SpliceAI field, which looks like
-    T|OR11H1---ENSG0123---ENST0123---yes---protein_coding---NM_00123.1|0.00|0.01|0.00|0.03|22|0|-2|8
-    Note that we need to consider cases with missing info, for which '.' is returned.
-    IMPORTANT, we must also consider the case of multiple spliceAI scores per variant such as:
-    SpliceAI=C|ENSG00000276612---ENSG00000276612.3---ENST00000623476.2---yes---protein_coding---|0.00|0.00|0.00|0.00|15|34|47|7,C|GATD3B---ENSG00000280071.4---ENST00000620528.5---yes---protein_coding---NM_001363758.2|0.00|0.00|0.00|0.00|5|-9|47|7
-    """
-
-    # Check if the value is missing
-    if pd.isna(value):
-        return np.nan
-
-    scores = []
-
-    # Split spliceAI scores
-    spliceai_split = value.split('|')
-    ncols_per_annotation = 9
-    n_genes = np.floor(len(spliceai_split) / ncols_per_annotation).astype(int)
-
-    for gene_id in range(n_genes):
-
-        # Return the maximum of the relevant components
-        start_idx = gene_id * 9
-        DS_max = np.max(
-            np.array(spliceai_split[start_idx+2:start_idx+6], dtype=float))
-
-        split_spliceai_info = spliceai_split[start_idx+1].split('---')
-
-        gene_symbol, gene_id, transcript_id = split_spliceai_info[
-            0], split_spliceai_info[1], split_spliceai_info[2]
-        scores.append((gene_id, DS_max))
-
-    return scores
+def ge(x, t):
+    return x == x and x >= t  # a missing score (NaN) never reaches a cut-off
 
 
-def write_saige_file(vep_df, out_file):
-
-    # write the SAIGE group file to disk
-    print(f"Saving the annotation to {out_file}")
-    with open(out_file, 'w') as fout:
-        for gene_id, variants in vep_df.groupby(args.vep_gene_col):
-            annotated = ~variants.annotation.isna()
-
-            snps = ' '.join(
-                [snp for snp in variants[args.vep_snp_id_col][annotated].values])
-            annos = ' '.join(
-                [anno for anno in variants.annotation[annotated].values])
-
-            fout.write(f"{gene_id} var {snps}\n")
-            fout.write(f"{gene_id} anno {annos}\n")
+def classes(csq):
+    cs = csq.split("&")
+    return (any(c in MISSENSE_CSQS for c in cs), any(c in SYNONYMOUS_CSQS for c in cs),
+            any(c in OTHER_CSQS for c in cs), any(c in INFRAME_CSQS for c in cs))
 
 
-if __name__ == '__main__':
+def annotate(csq, lof, revel, cadd, ds, t_hi, t_lo, splice_label):
+    """The October 2026 rule. lof: 'HC', 'LC' or ''; revel, cadd, ds: float or NaN."""
+    mis, syn, oth, inf = classes(csq)
+    if lof == "HC":
+        return "pLoF"
+    if (mis and (ge(revel, REVEL_CUTOFF) or ge(cadd, CADD_CUTOFF))) or lof == "LC":
+        return "damaging_missense"
+    if ge(ds, t_hi):
+        return splice_label
+    if mis or inf:
+        return "other_missense"
+    if oth:
+        return "non_coding"
+    if syn:
+        return "non_coding" if ge(ds, t_lo) else "synonymous"
+    return "non_coding"
 
-    vep_cols_to_read = [args.vep_snp_id_col, args.vep_gene_col, args.vep_lof_col,
-                        args.vep_revel_col, args.vep_cadd_phred_col, args.vep_consequence_col,
-                        args.vep_canonical_col, args.vep_biotype_col, args.vep_mane_select_col]
 
-    # encoding specified to prevent certain read error - https://github.com/BRaVa-genetics/variant-annotation-python/pull/3#issuecomment-1661885882
-    vep_df = pd.read_csv(
-        args.vep, sep=' ', usecols=vep_cols_to_read, na_values='.', encoding='cp1252')
-
-    # Filter raw VEP output to canonical, protein_coding transcripts
-    num_total_rows = vep_df.shape[0]
-    vep_df = vep_df[(vep_df[args.vep_biotype_col] == "protein_coding") &
-                    ((~vep_df[args.vep_mane_select_col].isna()) |
-                    ((vep_df[args.vep_mane_select_col].isna()) & (vep_df[args.vep_canonical_col] == "YES")))]
-
-    num_kept_rows = vep_df.shape[0]
-    print(
-        f"protein_coding & CANONICAL FILTER: {num_kept_rows} out of {num_total_rows} remaining")
-
-    vep_df[args.vep_revel_col] = vep_df[args.vep_revel_col].apply(
-        lambda x: str(x).split('&') if pd.notna(x) else ['.'])
-
-    # Filter down to the single unique value, excluding NaNs
-    def get_single_unique_revel(lst):
-        if pd.isna(lst).all():
-            return np.nan
-        for x in lst:
-            if x != '.':
+def first_value(v):
+    """First non-missing number of a list. VEP joins values with '&'; dbNSFP 5.4a stores one REVEL per transcript
+    separated by ';' ('.;0.53'), which can also reach the table as ',' or URL-encoded '%3B'."""
+    for x in v.replace("%3B", "&").replace(";", "&").replace(",", "&").split("&"):
+        if x not in (".", "", "NA"):
+            try:
                 return float(x)
-        return np.nan
+            except ValueError:
+                pass
+    return NAN
 
-    vep_df[args.vep_revel_col] = vep_df[args.vep_revel_col].apply(
-        get_single_unique_revel)
 
-    print(f"Total REVEL scores: {vep_df[args.vep_revel_col].notna().sum()}")
-    print(f"Total pathogenic REVEL scores: {len(vep_df[vep_df[args.vep_revel_col] > 0.773])}")
+def norm(vid):
+    """chr1:100:A:G and 1:100:A:G (and '_' separators) -> one join key."""
+    c, p, r, a = re.split(r"[:_]", vid)
+    return "%s:%s:%s:%s" % (c[3:] if c.startswith("chr") else c, p, r, a)
 
-    if args.cadd_indels:
-        column_names = ['Chrom', 'Pos', 'Ref', 'Alt', 'RawScore', 'PHRED']
-        cadd_indels = pd.read_csv(args.cadd_indels, delimiter='\t', comment='#', names=column_names, header=None)
 
-        cadd_indels['snpid'] = ('chr' + cadd_indels['Chrom'].astype(str) + 
-	            	            ':' + cadd_indels['Pos'].astype(str) + 
-    	    	                ':' + cadd_indels['Ref'] + 
-        	        	        ':' + cadd_indels['Alt'])
+def spliceai_ds(info_value):
+    """{gene (version-stripped): DS_MAX} from a SpliceAI v1 INFO value: 9-field '|' blocks, one per gene."""
+    s = info_value.split("|"); out = {}
+    for b in range(len(s) // 9):
+        gf = s[b * 9 + 1].split("---")
+        gid = (gf[1] if len(gf) > 1 else gf[0]).split(".")[0]
+        try:
+            ds = max(float(x) for x in s[b * 9 + 2:b * 9 + 6])
+        except ValueError:
+            continue
+        out[gid] = max(ds, out.get(gid, -1.0))
+    return out
 
-        cadd_scores_before = vep_df[args.vep_cadd_phred_col].notna().sum()
-        print('Non NaN PHRED scores in vep_df:', cadd_scores_before)        
-        print('Non NaN PHRED scores in cadd_indels:', cadd_indels['PHRED'].notna().sum())        
-        
-        print(vep_df[args.vep_cadd_phred_col], cadd_indels['PHRED'])
 
-        cadd_indels = cadd_indels.rename(columns={'PHRED': 'PHRED_indel'})
+def read_spliceai_v1(path):
+    ds = {}
+    with opn(path) as fh:
+        for line in fh:
+            if line[0] == "#":
+                continue
+            f = line.rstrip("\n").split("\t", 8)
+            vid = norm("%s:%s:%s:%s" % (f[0], f[1], f[3], f[4]))
+            for kv in f[7].split(";"):
+                if kv.startswith("SpliceAI="):
+                    for g, v in spliceai_ds(kv[9:]).items():
+                        ds[(vid, g)] = max(v, ds.get((vid, g), -1.0))
+    return ds
 
-        vep_df = pd.merge(vep_df, cadd_indels[["snpid", "PHRED_indel"]], left_on=args.vep_snp_id_col, right_on="snpid", how="left")
-        vep_df[args.vep_cadd_phred_col] = vep_df[args.vep_cadd_phred_col].fillna(vep_df['PHRED_indel'])
-        print(vep_df)
 
-        cadd_scores_after = vep_df[args.vep_cadd_phred_col].notna().sum()
-        print('Non NaN PHRED scores in vep_df:', vep_df[args.vep_cadd_phred_col].notna().sum())        
- 
-        if cadd_scores_before == cadd_scores_after:
-            raise Exception('CADD scores unsuccessfully merged')
+def read_spliceai2(paths):
+    """{(variant key, strand): score} from SpliceAI2 tables: chrom pos ref alt strand ... score (last column);
+    a header line, if any, is skipped. Several files: precomputed lookups and GPU scores."""
+    s2 = {}
+    for p in paths:
+        with opn(p) as fh:
+            for l in fh:
+                f = l.rstrip("\n").split("\t")
+                if len(f) < 6 or not f[1].isdigit():
+                    continue
+                s2[(norm("%s:%s:%s:%s" % tuple(f[:4])), f[4])] = float(f[-1])
+    return s2
 
-    spliceai_df = pd.read_csv(args.spliceai, sep='\t', comment='#', header=None, names=["CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO"], na_values='.')
 
-    # Redefine ID
-    spliceai_df["ID"] = spliceai_df.CHROM.astype(str) + ":" + spliceai_df.POS.astype(str)  + ":" + spliceai_df.REF + ":" + spliceai_df.ALT
+def read_gtf(path):
+    """GENCODE gene strand and span: {gene: strand}, {(gene, chrom without 'chr'): (start, end)}."""
+    strand, span = {}, {}
+    with opn(path) as fh:
+        for l in fh:
+            if l[0] == "#":
+                continue
+            f = l.split("\t", 8)
+            if f[2] != "gene":
+                continue
+            g = re.search(r'gene_id "([^"]+)"', f[8]).group(1).split(".")[0]
+            strand[g] = f[6]
+            c = f[0][3:] if f[0].startswith("chr") else f[0]
+            span[(g, c)] = (int(f[3]), int(f[4]))   # per chromosome: PAR genes sit on X and Y
+    return strand, span
 
-    print("Unique SNP-IDs found with SpliceAI:", np.unique(spliceai_df.index).shape[0])
 
-    spliceai_df["spliceai_pairs"] = spliceai_df["INFO"].map(get_spliceAI_DS)
+def read_cadd_indels(path):
+    """CADD's own output (Chrom Pos Ref Alt RawScore PHRED) -> {variant key: PHRED}."""
+    out = {}
+    with opn(path) as fh:
+        for l in fh:
+            if l[0] == "#":
+                continue
+            f = l.rstrip("\n").split("\t")
+            out[norm("%s:%s:%s:%s" % tuple(f[:4]))] = float(f[5])
+    return out
 
-    # Drop nan pairs otherwise crashing - https://github.com/BRaVa-genetics/variant-annotation-python/pull/3#issuecomment-1661885882
-    spliceai_df = spliceai_df[spliceai_df.spliceai_pairs.notna()]
 
-    spliceai_df = spliceai_df.explode("spliceai_pairs")
-    spliceai_df[["GENE", "max_DS"]] = pd.DataFrame(spliceai_df['spliceai_pairs'].values.tolist(), index=spliceai_df.index)
-    spliceai_df = spliceai_df.drop(["INFO", "spliceai_pairs"], axis='columns')
+def fmt(x):
+    return "NA" if x != x else "%g" % x
 
-    # We don't want the ENSEMBL gene ID version - drop the .VERSION
-    spliceai_df['GENE'] = spliceai_df['GENE'].astype(str).apply(lambda x: x.split('.')[0])
 
-    # nan max DS_score FILTER
-    num_total_rows = spliceai_df.shape[0]
-    spliceai_df = spliceai_df[~spliceai_df["max_DS"].isna()]
-    num_kept_rows = spliceai_df.shape[0]
-    print(f"DS_Score FILTER: {num_kept_rows} out of {num_total_rows} remaining")
+def run(a, log=sys.stdout):
+    model = "spliceai2" if a.spliceai2 else "spliceai"
+    T = MODELS[model]
+    n = Counter()
+    if model == "spliceai2":
+        if not a.gtf:
+            sys.exit("--spliceai2 needs --gtf (GENCODE v39): an entry takes the score on its gene's strand, inside its gene")
+        s2 = read_spliceai2(a.spliceai2); strand, span = read_gtf(a.gtf)
+    else:
+        v1 = read_spliceai_v1(a.spliceai)
+    cadd_ind = read_cadd_indels(a.cadd_indels) if a.cadd_indels else {}
 
-    # Now generate the annotations
-    vep_df = vep_df.merge(spliceai_df, left_on=[args.vep_snp_id_col, args.vep_gene_col], right_on=["ID", "GENE"], how='left')
-    
-    # if no SpliceAI scores - raise an exception as an unsuccessful merge can be hard to spot
-    if len(vep_df[~vep_df['max_DS'].isna()]) == 0:
-        raise Exception("""No max_DS SpliceAI scores detected!
-            Check variant ID merging between spliceAI and VEP information.
-            Perhaps chrCHR:POS:REF:ALT vs CHR:POS:REF:ALT or vice versa""")
+    # One row per (variant, gene): the MANE Select row, else the canonical one, protein-coding only.
+    keep = OrderedDict()
+    with opn(a.vep) as fh:
+        h = fh.readline().split()
+        need = [a.vep_snp_id_col, a.vep_gene_col, a.vep_lof_col, a.vep_revel_col, a.vep_cadd_phred_col,
+                a.vep_consequence_col, a.vep_transcript_col, a.vep_mane_select_col, a.vep_canonical_col, a.vep_biotype_col]
+        miss = [c for c in need if c not in h]
+        if miss:
+            sys.exit("VEP table lacks column(s) %s (header: %s)" % (miss, " ".join(h)))
+        ix = [h.index(c) for c in need]
+        for line in fh:
+            f = line.split()
+            if not f:
+                continue
+            vid, gene, lof, revel, cadd, csq, tx, mane, canon, bio = (f[i] if i < len(f) else "." for i in ix)
+            n["VEP rows"] += 1
+            mane = "" if mane in (".", "NA", "") else mane
+            if bio != "protein_coding" or not (mane or canon == "YES"):
+                continue
+            k = (vid, gene.split(".")[0])
+            row = dict(LOF=lof, REVEL=revel, CADD=cadd, CSQ=csq, TRANSCRIPT=tx, MANE=mane, CANON=canon)
+            if k in keep:
+                n["(variant, gene) with two MANE/canonical rows: MANE Select row kept"] += 1
+                if keep[k]["MANE"] or not mane:
+                    continue
+            keep[k] = row
+    n["(variant, gene) entries"] = len(keep)
 
-    vep_df["annotation"] = vep_df.apply(get_annotation, axis=1)
+    out_long = a.out_file + ".long.tsv.gz"
+    groups = OrderedDict(); labels = Counter(); src = Counter(); lofmiss = []
+    with gzip.open(out_long, "wt") as fl:
+        fl.write("\t".join(LONG_COLS) + "\n")
+        for (vid, gene), r in keep.items():
+            key = norm(vid)
+            lof = r["LOF"] if r["LOF"] in ("HC", "LC") else ""
+            if not lof and any(c in LOFTEE_CSQS for c in r["CSQ"].split("&")):
+                lofmiss.append(vid)
+            revel, cadd = first_value(r["REVEL"]), first_value(r["CADD"])
+            if cadd != cadd and key in cadd_ind:
+                cadd = cadd_ind[key]; n["CADD from --cadd_indels"] += 1
+            if model == "spliceai2":
+                v = s2.get((key, strand.get(gene, "?")))
+                if v is None:
+                    ds, sc = NAN, "none"
+                else:
+                    s_, e_ = span.get((gene, key.split(":")[0]), (0, -1))
+                    sc = "spliceai2" if s_ <= int(key.split(":")[1]) <= e_ else "spliceai2_outside_gene"
+                    ds = v
+            else:
+                ds = v1.get((key, gene), NAN); sc = "spliceai" if ds == ds else "none"
+            src[sc] += 1
+            lab = annotate(r["CSQ"], lof, revel, cadd, ds if sc in ("spliceai", "spliceai2") else NAN,
+                           T["t_hi"], T["t_lo"], T["label"])
+            labels[lab] += 1
+            groups.setdefault(gene, []).append((vid, lab))
+            fl.write("\t".join([vid, gene, lof or "NA", fmt(revel), fmt(cadd), r["CSQ"], r["TRANSCRIPT"],
+                                r["MANE"] or "NA", r["CANON"] or "NA", "protein_coding", fmt(ds), sc, lab]) + "\n")
+    if lofmiss and not a.allow_missing_loftee:
+        os.remove(out_long)
+        sys.exit("%d entries have a stop_gained / frameshift / splice donor or acceptor consequence but no LOFTEE call "
+                 "(e.g. %s). LOFTEE calls every such entry HC or LC, so it failed on these variants: check VEP's "
+                 "warnings file for 'Plugin 'LoF' went wrong', re-run VEP on them without --fork, and merge. "
+                 "--allow_missing_loftee writes the files anyway." % (len(lofmiss), ", ".join(lofmiss[:3])))
+    if keep and src["spliceai"] + src["spliceai2"] + src["spliceai2_outside_gene"] == 0:
+        os.remove(out_long)
+        sys.exit("No SpliceAI score matched any entry: check that the variant IDs (chrN:pos:ref:alt), the chromosome "
+                 "names and, for SpliceAI2, the GTF all describe the same build and the same variants.")
+    with opn(a.out_file, "wt") as fo:
+        for gene, vs in groups.items():
+            fo.write("%s var %s\n%s anno %s\n" % (gene, " ".join(v for v, _ in vs), gene, " ".join(l for _, l in vs)))
+    for k, v in n.items():
+        print("  %10d  %s" % (v, k), file=log)
+    for k, v in src.most_common():
+        print("  %10d  SpliceAI source: %s" % (v, k), file=log)
+    for k in ["pLoF", "damaging_missense", T["label"], "other_missense", "synonymous", "non_coding"]:
+        print("  %10d  %s" % (labels[k], k), file=log)
+    print("wrote %s (%d genes) and %s" % (a.out_file, len(groups), out_long), file=log)
+    return labels
 
-    # no annotation FILTER
-    num_total_rows = vep_df.shape[0]
-    vep_df = vep_df[~(vep_df['annotation'] == '')]
-    num_kept_rows = vep_df.shape[0]
-    print(f"empty annotation FILTER: {num_kept_rows} out of {num_total_rows} remaining") 
 
-    print(vep_df["annotation"].value_counts())
-    vep_df.to_csv(args.out_file + '.long.csv.gz', index=False, compression='gzip')
-    write_saige_file(vep_df, args.out_file)
+# ------------------------------------------------------------------------------------------------ selftest
+def selftest():
+    ok = True
+
+    def check(name, cond):
+        nonlocal ok
+        print("  %-76s %s" % (name, "PASS" if cond else "FAIL")); ok &= bool(cond)
+
+    S2 = MODELS["spliceai2"]; V1 = MODELS["spliceai"]
+    A2 = lambda csq, lof="", revel=NAN, cadd=NAN, ds=NAN: annotate(csq, lof, revel, cadd, ds, S2["t_hi"], S2["t_lo"], S2["label"])
+    A1 = lambda csq, lof="", revel=NAN, cadd=NAN, ds=NAN: annotate(csq, lof, revel, cadd, ds, V1["t_hi"], V1["t_lo"], V1["label"])
+    check("HC -> pLoF, whatever else", A2("stop_gained", "HC", ds=0.9) == "pLoF")
+    check("LC -> damaging_missense", A2("frameshift_variant", "LC") == "damaging_missense")
+    check("missense REVEL 0.773 -> damaging; 0.772 and CADD 28.0 -> other_missense",
+          A2("missense_variant", revel=0.773) == "damaging_missense" and A2("missense_variant", revel=0.772, cadd=28.0) == "other_missense")
+    check("protein_altering_variant CADD 28.1 -> damaging", A2("protein_altering_variant", cadd=28.1) == "damaging_missense")
+    check("damaging before the splice category", A2("missense_variant", revel=0.9, ds=0.9) == "damaging_missense")
+    check("SpliceAI2 0.40 -> spliceai2_gt040; 0.39 intron -> non_coding",
+          A2("intron_variant", ds=0.40) == "spliceai2_gt040" and A2("intron_variant", ds=0.39) == "non_coding")
+    check("SpliceAI v1 0.5 -> spliceai_gt05; 0.49 -> non_coding",
+          A1("intron_variant", ds=0.5) == "spliceai_gt05" and A1("intron_variant", ds=0.49) == "non_coding")
+    check("missense low REVEL with SpliceAI2 0.5 -> splice category",
+          A2("missense_variant", revel=0.1, cadd=5, ds=0.5) == "spliceai2_gt040")
+    check("missense SpliceAI2 0.3 -> other_missense (no route into damaging)", A2("missense_variant", ds=0.3) == "other_missense")
+    check("synonymous: < 0.10 synonymous, 0.10-0.40 non_coding, >= 0.40 splice",
+          A2("synonymous_variant", ds=0.09) == "synonymous" and A2("synonymous_variant", ds=0.10) == "non_coding"
+          and A2("synonymous_variant", ds=0.40) == "spliceai2_gt040")
+    check("synonymous without a score -> synonymous", A2("synonymous_variant") == "synonymous")
+    check("splice_region_variant&synonymous_variant -> synonymous (any term)",
+          A2("splice_region_variant&synonymous_variant") == "synonymous")
+    check("synonymous_variant&intron_variant -> non_coding (non-coding tested first)",
+          A2("synonymous_variant&intron_variant") == "non_coding")
+    check("missense_variant&splice_region_variant counts as missense",
+          A2("missense_variant&splice_region_variant", revel=0.8) == "damaging_missense")
+    check("unmatched consequence (splice_region alone) -> non_coding", A2("splice_region_variant") == "non_coding")
+    check("REVEL lists: '&', ';', ',', '%3B' and '.'", first_value(".&0.81&0.2") == 0.81 and
+          first_value(".;0.53") == first_value(".,0.53") == first_value(".%3B0.53") == 0.53 and first_value(".") != first_value("."))
+    sp = ("T|RPL36---ENSG00000130255.13---ENST1---yes---protein_coding---NM_1,NM_2|0.10|0.20|0.30|0.40|-6|-27|6|-27,"
+          "T|GB---ENSG00000999999.1---ENST2---yes---protein_coding---NM_3|0.90|0.00|0.00|0.00|21|2|1|8")
+    check("SpliceAI v1 parse survives a RefSeq comma list", spliceai_ds(sp) == {"ENSG00000130255": 0.4, "ENSG00000999999": 0.9})
+    check("variant keys join across chr prefix and separators", norm("chr1:100:A:G") == norm("1_100_A_G") == "1:100:A:G")
+
+    # end to end, SpliceAI2 then v1, on a tiny VEP table
+    t = tempfile.mkdtemp(); null = open(os.devnull, "w")
+    vep = os.path.join(t, "vep.txt")
+    rows_in = [
+        "chr1:100:A:G ENSG1 . .&0.9 20 missense_variant ENST1 NM_1 YES protein_coding",
+        "chr1:100:A:G ENSG1 . . . missense_variant ENST1b . . protein_coding",          # not MANE/canonical
+        "chr1:100:A:G ENSG2 . . . upstream_gene_variant ENST2 . YES lncRNA",          # not protein-coding
+        "chr1:200:C:T ENSG1 . . . intron_variant ENST1 NM_1 YES protein_coding",       # SpliceAI2 0.6 -> splice
+        "chr1:300:G:A ENSG1 . . . synonymous_variant ENST1 NM_1 YES protein_coding",   # 0.2 -> non_coding
+        "chr1:400:T:C ENSG1 HC . . stop_gained ENST1 NM_1 YES protein_coding",
+        "chr1:900:T:C ENSG1 . . . downstream_gene_variant ENST1 NM_1 YES protein_coding",  # outside ENSG1: no route
+        "chr1:950:G:T ENSG1 . . . synonymous_variant ENST1 . YES protein_coding",      # canonical, then MANE row wins
+        "chr1:950:G:T ENSG1 . . . missense_variant ENST1m NM_1 . protein_coding",
+    ]
+    with open(vep, "w") as fh:
+        fh.write("SNP_ID GENE LOF REVEL_SCORE CADD_PHRED CSQ TRANSCRIPT MANE_SELECT CANONICAL BIOTYPE\n")
+        fh.write("\n".join(rows_in) + "\n")
+    gtf = os.path.join(t, "g.gtf")
+    with open(gtf, "w") as fh:
+        fh.write('chr1\tHAVANA\tgene\t50\t800\t.\t+\t.\tgene_id "ENSG1.3";\n')
+    s2 = os.path.join(t, "s2.tsv")
+    with open(s2, "w") as fh:
+        fh.write("chrom\tpos\tref\talt\tstrand\tspliceai2_summary_score\n")
+        for r in ["chr1\t200\tC\tT\t+\t0.6", "chr1\t200\tC\tT\t-\t0.0", "chr1\t300\tG\tA\t+\t0.2",
+                  "chr1\t900\tT\tC\t+\t0.9", "chr1\t100\tA\tG\t-\t0.99"]:   # 100 '-': the other strand, not ENSG1's
+            fh.write(r + "\n")
+    out = os.path.join(t, "o.txt.gz")
+    ns = argparse.Namespace(vep=vep, spliceai=None, spliceai2=[s2], gtf=gtf, out_file=out, cadd_indels=None,
+                            allow_missing_loftee=False, **DEFAULT_COLS)
+    run(ns, log=null)
+    rows = {tuple(l.split("\t")[:2]): l.rstrip("\n").split("\t") for l in list(gzip.open(out + ".long.tsv.gz", "rt"))[1:]}
+    lab = {k: v[-1] for k, v in rows.items()}
+    check("end to end: MANE/canonical protein-coding rows only (6 entries)", len(rows) == 6)
+    check("end to end: REVEL '.&0.9' -> damaging_missense", lab[("chr1:100:A:G", "ENSG1")] == "damaging_missense")
+    check("end to end: SpliceAI2 score taken on the gene's strand only", rows[("chr1:100:A:G", "ENSG1")][10] == "NA")
+    check("end to end: intron 0.6 -> spliceai2_gt040", lab[("chr1:200:C:T", "ENSG1")] == "spliceai2_gt040")
+    check("end to end: synonymous 0.2 -> non_coding", lab[("chr1:300:G:A", "ENSG1")] == "non_coding")
+    check("end to end: HC -> pLoF", lab[("chr1:400:T:C", "ENSG1")] == "pLoF")
+    check("end to end: outside the gene -> no route, score kept",
+          lab[("chr1:900:T:C", "ENSG1")] == "non_coding" and rows[("chr1:900:T:C", "ENSG1")][10:12] == ["0.9", "spliceai2_outside_gene"])
+    check("end to end: two rows for one (variant, gene) -> the MANE Select row",
+          rows[("chr1:950:G:T", "ENSG1")][6] == "ENST1m" and lab[("chr1:950:G:T", "ENSG1")] == "other_missense")
+    g = [l.split() for l in gzip.open(out, "rt")]
+    check("end to end: group file has var/anno lines in long-table order",
+          g[0][:2] == ["ENSG1", "var"] and g[1][:2] == ["ENSG1", "anno"] and len(g[0]) == len(g[1]) == 8
+          and g[1][2:] == [lab[(v, "ENSG1")] for v in g[0][2:]])
+    v1 = os.path.join(t, "v1.vcf")
+    with open(v1, "w") as fh:
+        fh.write("##fileformat=VCFv4.2\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n")
+        fh.write("1\t200\t.\tC\tT\t.\t.\tSpliceAI=T|X---ENSG1.5---ENST1---yes---protein_coding---NM_1|0.55|0.00|0.00|0.00|1|2|3|4\n")
+        fh.write("1\t300\t.\tG\tA\t.\t.\tSpliceAI=A|X---ENSG1.5---ENST1---yes---protein_coding---NM_1|0.30|0.00|0.00|0.00|1|2|3|4\n")
+    ns.spliceai, ns.spliceai2, ns.gtf, ns.out_file = v1, None, None, os.path.join(t, "o1.txt")
+    run(ns, log=null)
+    lab1 = {tuple(l.split("\t")[:2]): l.rstrip("\n").split("\t")[-1] for l in list(gzip.open(ns.out_file + ".long.tsv.gz", "rt"))[1:]}
+    check("end to end, SpliceAI v1 (no 'chr' in its VCF): 0.55 -> spliceai_gt05, synonymous 0.3 -> non_coding",
+          lab1[("chr1:200:C:T", "ENSG1")] == "spliceai_gt05" and lab1[("chr1:300:G:A", "ENSG1")] == "non_coding")
+
+    def refused(ns_):
+        try:
+            run(ns_, log=null); return False
+        except SystemExit:
+            return True
+    nn = argparse.Namespace(**vars(ns)); nn.spliceai = os.path.join(t, "none.vcf"); nn.out_file = os.path.join(t, "o2.txt")
+    open(nn.spliceai, "w").write("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n")
+    check("negative control: no SpliceAI score matching any entry is refused", refused(nn))
+    with open(vep, "a") as fh:   # a stop_gained with no LOFTEE call: LOFTEE failed on it
+        fh.write("chr1:500:C:A ENSG1 . . . stop_gained ENST1 NM_1 YES protein_coding\n")
+    ns.out_file = os.path.join(t, "o3.txt")
+    check("negative control: a stop_gained without a LOFTEE call is refused", refused(ns))
+    ns.allow_missing_loftee = True
+    check("... and written with --allow_missing_loftee", not refused(ns))
+    print("\nselftest %s" % ("PASSED" if ok else "FAILED"))
+    return 0 if ok else 1
+
+
+if __name__ == "__main__":
+    if "--selftest" in sys.argv:
+        sys.exit(selftest())
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--vep", "-v", required=True, help="VEP table (step 1; whitespace-delimited, header line)")
+    sp = ap.add_mutually_exclusive_group(required=True)
+    sp.add_argument("--spliceai2", nargs="+", help="SpliceAI2 score table(s): chrom pos ref alt strand ... score (default model)")
+    sp.add_argument("--spliceai", "-s", help="SpliceAI v1 VCF instead of SpliceAI2 (label spliceai_gt05)")
+    ap.add_argument("--gtf", help="GENCODE v39 GTF (with --spliceai2): gene strand and span")
+    ap.add_argument("--out_file", "-w", required=True, help="group file; the long table goes to OUT.long.tsv.gz")
+    ap.add_argument("--cadd_indels", help="CADD output for indels (step 3), used where VEP has no CADD")
+    ap.add_argument("--allow_missing_loftee", action="store_true",
+                    help="write the files even when LoF-type entries lack a LOFTEE call (otherwise refused)")
+    for k, v in DEFAULT_COLS.items():
+        ap.add_argument("--" + k, default=v, help="column name in the VEP table (default %s)" % v)
+    run(ap.parse_args())

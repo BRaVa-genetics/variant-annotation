@@ -1,35 +1,57 @@
-# BRaVa SAIGE annotation group-files
+# BRaVa SAIGE annotation group files
 
-*This repository is [step 3](https://github.com/BRaVa-genetics/variant-annotation#3-run-the-python-brava-annotation-script-to-extract-variant-annotations) of the [BRaVa annotation pipeline](https://github.com/BRaVa-genetics/variant-annotation).*
+*Step 4 of the [BRaVa annotation pipeline](https://github.com/BRaVa-genetics/variant-annotation).*
 
-The python script in this repository merges VEP and SpliceAI information to generate a SAIGE annotation groupfile with annotations defined according to BRaVa's [guidelines](https://docs.google.com/document/d/11Nnb_nUjHnqKCkIB3SQAbR6fl66ICdeA-x_HyGWsBXM/edit#). The required inputs for the annotations by VEP and SpliceAI are table format files (tab-delimited).
-
-The bundled shell script (`scripts/brava_create_annot.sh`) provides an example of running these commands on an HPC cluster as an array job.
+`scripts/brava_create_annot.py` merges the VEP table (step 1) with SpliceAI2 scores (step 2; or SpliceAI v1) and
+writes a SAIGE group file with BRaVa's labels, plus a long table with one row per (gene, variant) and every field its
+label came from. The rules are in the [top-level README](../README.md#the-labels) and the script's docstring.
 
 ## Requirements
 
-This script requires `numpy` and `pandas` to be installed in your Python environment.
+Python 3, standard library only. `python3 scripts/brava_create_annot.py --selftest` runs 31 checks on built-in
+examples (the rules at each cut-off, REVEL list formats, strand and gene-body handling of SpliceAI2, the MANE Select
+row winning over a canonical one, and the refusals below).
 
 ## Usage
 
 ```bash
-python brava_create_annot.py -v vep_table -s spliceai_vcf -w output_file --vep_snp_id_col snp_id_col --vep_gene_col gene_id_col --vep_lof_col lof_col --vep_revel_col revel_col --vep_cadd_phred_col cadd_col --vep_consequence_col csq_col --vep_canonical_col canonical_col --vep_biotype_col biotype_col --vep_mane_select_col mane_select_col
+python3 brava_create_annot.py -v VEP_TABLE --spliceai2 SCORES.tsv.gz [SCORES.tsv.gz ...] --gtf gencode.v39.annotation.gtf.gz -w OUT.txt.gz
+python3 brava_create_annot.py -v VEP_TABLE -s SPLICEAI_V1.vcf -w OUT.txt.gz
 ```
-
-Note that if you followed our [**step 1**](https://github.com/BRaVa-genetics/variant-annotation#1-run-vep-version-105-with-loftee-v104_grch38) commands, you won't need to use any arguments other than `-v`, `-s` and `-w`, as these are set at the defaults.
 
 ## Arguments
 
-* `-v/--vep`: file path to the (tab-delimited) VEP annotated table ([**step 1**](https://github.com/BRaVa-genetics/variant-annotation#1-run-vep-version-105-with-loftee-v104_grch38) output)
-* `-s/--spliceai`: file path to the SpliceAI annotated vcf file ([**step 2**](https://github.com/BRaVa-genetics/variant-annotation#2-run-spliceai) output).
-* `-w/--out_file`: output file where the results will be saved
-* `--vep_snp_id_col`: SNP ID (chr:pos:ref:alt) column in the VEP annotated table
-* `--vep_gene_col`: Gene ID column in the VEP annotated table
-* `--vep_lof_col`: LoF column in the VEP annotated table
-* `--vep_revel_col`: REVEL column in the VEP annotated table
-* `--vep_cadd_phred_col`: Phred scaled CADD score column in the VEP annotated table
-* `--vep_consequence_col`: consequence column in the VEP annotated table
-* `--vep_canonical_col`: canonical transcript column in the VEP annotated table
-* `--vep_biotype_col`: biotype column in the VEP annotated table
-* `--vep_mane_select_col`: MANE select column in the VEP annotated table (not that this the column that annotates the name of the transcript, not a boolean identifier of whether the annotated transcript is MANE select (annotated using the `--mane-select` flag))
-* `--cadd_indels`: (optional) file path to the CADD indels file
+* `-v/--vep`: the VEP table from step 1 (whitespace-delimited, header line).
+* `--spliceai2`: SpliceAI2 score tables (columns chrom, pos, ref, alt, strand, ..., score last; a header line is
+  skipped): the precomputed lookups and the GPU-scored chunks of step 2. Needs `--gtf`.
+* `--gtf`: GENCODE v39 GTF. Each entry takes the SpliceAI2 score on its gene's strand, and only when the variant lies
+  inside the gene (otherwise the score is kept in `DS_MAX` with `SPLICEAI_SOURCE` = `spliceai2_outside_gene` and
+  gives no splice route).
+* `-s/--spliceai`: a SpliceAI v1 VCF instead of SpliceAI2 (label `spliceai_gt05`). `chr1` and `1` both work.
+* `-w/--out_file`: the group file (gzipped if it ends in `.gz`); the long table goes to `OUT_FILE.long.tsv.gz`.
+* `--cadd_indels`: CADD output for indels (step 3), used where VEP has no CADD.
+* `--allow_missing_loftee`: write the files even when LoF-type entries have no LOFTEE call (see below).
+* `--vep_snp_id_col`, `--vep_gene_col`, `--vep_lof_col`, `--vep_revel_col`, `--vep_cadd_phred_col`,
+  `--vep_consequence_col`, `--vep_transcript_col`, `--vep_mane_select_col`, `--vep_canonical_col`,
+  `--vep_biotype_col`: column names in the VEP table, if yours differ from step 1's.
+
+## It refuses to write when
+
+* **a stop_gained / frameshift / splice donor or acceptor entry has no LOFTEE call.** LOFTEE calls every such entry HC
+  or LC, so a missing call means LOFTEE failed on that variant (VEP's `--fork` with LOFTEE's conservation database
+  did this at random; [vep105_loftee](https://github.com/BRaVa-genetics/vep105_loftee#why-no-conservation-database)).
+  Re-run VEP on those variants and merge;
+* **no SpliceAI score matches any entry**: almost always a mismatch of variant IDs, chromosome names or genome build.
+
+## Output
+
+* the group file: per gene a `GENE var ...` line and a `GENE anno ...` line, variants in the order of the VEP table;
+* the long table: `ID GENE LOF REVEL_SCORE CADD_PHRED CSQ TRANSCRIPT MANE_SELECT CANONICAL BIOTYPE DS_MAX
+  SPLICEAI_SOURCE ANNOTATION`. It is the `--annoTable` input of universal-saige's FlexRV builder
+  (`scripts/alphamissense_files.sh`).
+
+## Checked against the October 2026 release
+
+On chromosomes 21, 22 and X, the script reproduces the label, LoF call, consequence, transcript and SpliceAI2 score of
+all 661,493 entries of the BRaVa October 2026 group files that were annotated from scratch (re-annotated variants of
+six biobanks), with no entry missing.
