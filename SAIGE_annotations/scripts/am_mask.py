@@ -5,7 +5,8 @@ controls/AM_ACMG_CUTOFF.md). A separate file because a group file gives a varian
 and every one of these already carries damaging_missense, other_missense or the SpliceAI label there.
 
 Scores come from the FlexRV builder's --provenance output for the same chromosome (alphamissense_files.sh runs
-both), so this mask and the flexrv_AM file use one score per (gene, variant). Kept: SOURCE is a real AlphaMissense
+both: a raw-scale run for this mask, then the percentile-scale flexrv_AMPCT file), on the raw AlphaMissense
+scale and each entry's own transcript. Kept: SOURCE is a real AlphaMissense
 row (not 'missing' = gene-mean placeholder, not 'dropped_nonmissense'; with --nonMissense drop the CSQ includes
 missense_variant), AM >= threshold. Variant order and IDs follow the group file brava_create_annot.py wrote.
 
