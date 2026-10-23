@@ -159,7 +159,8 @@ writes two files:
   The transcript is MANE Select, else canonical, in the version GENCODE v39 holds. The full mapping is in
   universal-saige's README, step 4.
 * `brava.chr21.saige_group.am_moderate.saige_group.txt.gz`: missense variants with raw AlphaMissense >= 0.906 (the
-  PP3 Moderate cut-off).
+  PP3 Moderate cut-off), each scored from the same AlphaMissense row as its `flexrv_AMPCT` entry. Both files come from
+  one run.
 
 With SpliceAI v1, add `spliceai_gt05` as a fourth argument. `KEEP_RAW=1` also keeps `flexrv_AM.txt.gz` (the raw-score
 FlexRV file of the earlier release).
