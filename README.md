@@ -153,6 +153,7 @@ writes two files:
   | missense | percentile of its raw AlphaMissense score among all possible missense variants of the gene's transcript: `(#below + (#equal+1)/2) / N` |
   | protein-altering non-missense (in-frame indel, LOFTEE-LC LoF, start/stop lost) | the gene's mean, after ranking |
   | no protein change | dropped |
+  | missense in a paralog copy AlphaMissense does not score (identical protein) | its protein-level score for the same amino-acid change, then as above |
   | missense in a gene AlphaMissense does not score | 0.5 (the expected within-gene percentile) |
 
   The transcript is MANE Select, else canonical, in the version GENCODE v39 holds. The full mapping is in
