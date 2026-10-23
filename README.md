@@ -15,7 +15,8 @@ testing with [universal-saige](https://github.com/BRaVa-genetics/universal-saige
 > 4. **dbNSFP 5.4a** (REVEL, CADD 1.7) for everyone, and **no LOFTEE conservation database**: with VEP's `--fork` it
 >    made LOFTEE drop LoF calls at random (see [vep105_loftee](https://github.com/BRaVa-genetics/vep105_loftee#why-no-conservation-database)).
 >    The annotation script now refuses to write group files when a LoF-type variant has no LOFTEE call.
-> 5. **AlphaMissense files** for two extra runs: an `am_moderate` mask (AlphaMissense >= 0.906) and a FlexRV file.
+> 5. **AlphaMissense files** for extra runs: an `am_moderate` mask (AlphaMissense >= 0.906) and a FlexRV file on the
+>    FlexRV paper's scale (`flexrv_AMPCT`: each missense variant's within-gene AlphaMissense percentile).
 > 6. `brava_create_annot.py` needs only Python 3 (no numpy / pandas) and has a `--selftest`.
 
 ### Contents
@@ -141,13 +142,34 @@ Per chromosome, from the group file and its long table, using universal-saige's 
 ```
 bash SAIGE_annotations/scripts/alphamissense_files.sh /path/to/universal-saige brava.chr21.saige_group.txt.gz 21
 ```
-writes `brava.chr21.saige_group.flexrv_AM.txt.gz` (FlexRV weights: pLoF 1.0, missense variants their AlphaMissense
-score) and `brava.chr21.saige_group.am_moderate.saige_group.txt.gz` (missense variants with AlphaMissense >= 0.906,
-the PP3 Moderate cut-off). With SpliceAI v1, add `spliceai_gt05` as a fourth argument.
+writes two files:
+
+* `brava.chr21.saige_group.flexrv_AMPCT.txt.gz`: FlexRV weights on the FlexRV paper's scale (Schwartzentruber et al.,
+  bioRxiv 2025.11.04.686320). Each score is computed as follows:
+
+  | entry | score |
+  |---|---|
+  | pLoF | 1.0 |
+  | missense | percentile of its raw AlphaMissense score among all possible missense variants of the gene's transcript: `(#below + (#equal+1)/2) / N` |
+  | protein-altering non-missense (in-frame indel, LOFTEE-LC LoF, start/stop lost) | the gene's mean, after ranking |
+  | no protein change | dropped |
+  | missense in a paralog copy AlphaMissense does not score (identical protein) | its protein-level score for the same amino-acid change, then as above |
+  | missense in a gene AlphaMissense does not score | 0.5 (the expected within-gene percentile) |
+
+  The transcript is MANE Select, else canonical, in the version GENCODE v39 holds. The full mapping is in
+  universal-saige's README, step 4.
+* `brava.chr21.saige_group.am_moderate.saige_group.txt.gz`: missense variants with raw AlphaMissense >= 0.906 (the
+  PP3 Moderate cut-off).
+
+With SpliceAI v1, add `spliceai_gt05` as a fourth argument. `KEEP_RAW=1` also keeps `flexrv_AM.txt.gz` (the raw-score
+FlexRV file of the earlier release).
+
+A fourth run uses the scallion weights. Its `flexrv_SCALLION.txt.gz` files are built centrally from the scallion
+authors' within-gene percentiles, with the same variants and rules as `flexrv_AMPCT`, and come with the release.
 
 ## 6. Run SAIGE
 
-With [universal-saige](https://github.com/BRaVa-genetics/universal-saige) step 2, three runs per chromosome and
+With [universal-saige](https://github.com/BRaVa-genetics/universal-saige) step 2, four runs per chromosome and
 phenotype (its [step 2 template](https://github.com/BRaVa-genetics/universal-saige/blob/main/templates/step_2_template.sh)
 has them written out):
 
@@ -155,6 +177,7 @@ has them written out):
 |---|---|---|
 | SAIGE-GENE+ (SKAT-O) | `*.saige_group.txt.gz` | `pLoF,damaging_missense,pLoF:damaging_missense,pLoF:damaging_missense:spliceai2_gt040,synonymous,other_missense,pLoF:damaging_missense:spliceai2_gt040:other_missense:synonymous` |
 | SKAT-O, AlphaMissense >= 0.906 | `*.am_moderate.saige_group.txt.gz` | `am_moderate`, with `--singleInGroup FALSE` |
-| FlexRV, AlphaMissense weights | `*.flexrv_AM.txt.gz`, with `--flexRVscore AM` | `pLoF:damaging_missense:other_missense:spliceai2_gt040` |
+| FlexRV, AlphaMissense percentile weights | `*.flexrv_AMPCT.txt.gz`, with `--flexRVscore AMPCT` | `pLoF:damaging_missense:other_missense:spliceai2_gt040` |
+| FlexRV, scallion weights | `*.flexrv_SCALLION.txt.gz`, with `--flexRVscore SCALLION` | `pLoF:damaging_missense:other_missense:spliceai2_gt040` |
 
 With SpliceAI v1, use `spliceai_gt05` in place of `spliceai2_gt040`.
