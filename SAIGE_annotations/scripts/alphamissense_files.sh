@@ -10,14 +10,17 @@
 #                                     lost) the gene's mean, after ranking; entries with no protein change dropped
 #   GROUP.am_moderate.saige_group.txt.gz   missense variants with raw AlphaMissense >= 0.906 (ACMG/AMP PP3 Moderate),
 #                                     label am_moderate, for a separate SKAT-O run
-# Both come from universal-saige's 04_flexrv_groupfile.sh (the canonical FlexRV builder), each entry scored on its
-# own transcript (--annoTable: MANE Select, else canonical). The am_moderate mask reads the RAW scores of a raw-scale
-# run (--amScale raw, as in the 2026-10 release; its flexrv_AM file, the raw-score FlexRV weights used before the
-# percentile scale, is kept only with KEEP_RAW=1). The full mapping from raw AlphaMissense to the percentile is in
-# universal-saige's README, step 4. Its AlphaMissense, MANE and GENCODE v39 files: bash download_resources.sh
-# --alphamissense in universal-saige. Every missense-type label can hold a missense variant -- including the SpliceAI
-# category (a missense variant with low REVEL/CADD and a splice call) -- so all three are passed to --missenseAnno,
-# and the FlexRV mask in step 2 is then pLoF:damaging_missense:other_missense:SPLICE_LABEL.
+# Both come from ONE run of universal-saige's 04_flexrv_groupfile.sh (the canonical FlexRV builder), each entry scored on
+# its own transcript (--annoTable: MANE Select, else canonical, the version GENCODE v39 holds): the am_moderate mask reads
+# the raw AlphaMissense score of the row each entry's percentile came from (since 2026-10-23; the 2026-10 release's masks
+# came from a separate raw run). chrX also reads AlphaMissense's chrY PAR rows, and paralog copies AlphaMissense does not
+# score take its protein-level scores when universal-saige's alphamissense_paralogs.py output sits next to the
+# per-chromosome files. KEEP_RAW=1 also writes flexrv_AM.txt.gz, the raw-score FlexRV weights of the earlier release.
+# The full mapping from raw AlphaMissense to the percentile is in universal-saige's README, step 4. Its AlphaMissense,
+# MANE and GENCODE v39 files: bash download_resources.sh --alphamissense in universal-saige. Every missense-type label
+# can hold a missense variant -- including the SpliceAI category (a missense variant with low REVEL/CADD and a splice
+# call) -- so all three are passed to --missenseAnno, and the FlexRV mask in step 2 is then
+# pLoF:damaging_missense:other_missense:SPLICE_LABEL.
 set -euo pipefail
 US=$(cd "$1" && pwd); g=$(cd "$(dirname "$2")" && pwd)/$(basename "$2"); c=${3#chr}; lab=${4:-spliceai2_gt040}
 here=$(cd "$(dirname "$0")" && pwd)
@@ -32,17 +35,13 @@ am=$R/AlphaMissense_hg38.tsv.gz; iso=$R/AlphaMissense_isoforms_hg38.tsv.gz
 common=(--group "$g" --chr "$c" --missenseAnno damaging_missense,other_missense,$lab
         --am "$am" --isoforms "$iso" --annoTable "$g.long.tsv.gz" --mane "$R/MANE.GRCh38.summary.txt.gz"
         --gtf "$R/gencode.v39.annotation.gtf.gz")
-# 1. raw scale: the scores behind the am_moderate mask
-( cd "$US" && bash 04_flexrv_groupfile.sh "${common[@]}" --name AM --nonMissense drop \
-    --provenance "$stem.flexrv_AM.provenance.tsv" --out "$stem.flexrv_AM.txt" )
-python3 "$here/am_mask.py" "$g" "$stem.flexrv_AM.provenance.tsv" "$stem.am_moderate.saige_group.txt.gz"
-if [[ ${KEEP_RAW:-0} == 1 ]]; then
-  gzip -f "$stem.flexrv_AM.txt" "$stem.flexrv_AM.provenance.tsv"
-else
-  rm -f "$stem.flexrv_AM.txt" "$stem.flexrv_AM.provenance.tsv"
-fi
-# 2. the FlexRV paper's scale: the FlexRV weights
+# the FlexRV paper's scale: the FlexRV weights, and the provenance the am_moderate mask is read from
 ( cd "$US" && bash 04_flexrv_groupfile.sh "${common[@]}" --name AMPCT --amScale percentile --nonMissense gene-mean \
     --provenance "$stem.flexrv_AMPCT.provenance.tsv" --out "$stem.flexrv_AMPCT.txt" )
 gzip -f "$stem.flexrv_AMPCT.txt" "$stem.flexrv_AMPCT.provenance.tsv"
+python3 "$here/am_mask.py" "$g" "$stem.flexrv_AMPCT.provenance.tsv.gz" "$stem.am_moderate.saige_group.txt.gz"
+if [[ ${KEEP_RAW:-0} == 1 ]]; then
+  ( cd "$US" && bash 04_flexrv_groupfile.sh "${common[@]}" --name AM --nonMissense drop --out "$stem.flexrv_AM.txt" )
+  gzip -f "$stem.flexrv_AM.txt"
+fi
 echo "wrote $stem.flexrv_AMPCT.txt.gz and $stem.am_moderate.saige_group.txt.gz"
